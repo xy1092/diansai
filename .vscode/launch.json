@@ -1,0 +1,63 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "F5 Debug MSPM0G3507 (J-Link)",
+      "type": "cortex-debug",
+      "request": "launch",
+      "servertype": "jlink",
+      "cwd": "${workspaceFolder}/build",
+      "executable": "${workspaceFolder}/build/nuedc_car.out",
+      "gdbPath": "/usr/bin/arm-none-eabi-gdb",
+      "serverpath": "${workspaceFolder}/scripts/jlink_gdb_server.sh",
+      "device": "MSPM0G3507",
+      "deviceName": "MSPM0G3507",
+      "interface": "swd",
+      "serialNumber": "${input:jlinkSerialNumber}",
+      "runToEntryPoint": "main",
+      "showDevDebugOutput": "none",
+      "skipFiles": [
+        "/usr/**",
+        "**/libgcc/**",
+        "**/newlib/**",
+        "/startdir/**"
+      ],
+      "svdFile": "${env:HOME}/.vscode/extensions/ti-development-tools.cortex-debug-dp-mspm0-1.0.2/data/MSPM0G350X.svd",
+      "preLaunchCommands": [
+        "monitor reset",
+        "load"
+      ],
+      "preLaunchTask": "Build Firmware"
+    },
+    {
+      "name": "Attach MSPM0G3507 (J-Link)",
+      "type": "cortex-debug",
+      "request": "attach",
+      "servertype": "jlink",
+      "cwd": "${workspaceFolder}/build",
+      "executable": "${workspaceFolder}/build/nuedc_car.out",
+      "gdbPath": "/usr/bin/arm-none-eabi-gdb",
+      "serverpath": "${workspaceFolder}/scripts/jlink_gdb_server.sh",
+      "device": "MSPM0G3507",
+      "deviceName": "MSPM0G3507",
+      "interface": "swd",
+      "serialNumber": "${input:jlinkSerialNumber}",
+      "showDevDebugOutput": "none",
+      "skipFiles": [
+        "/usr/**",
+        "**/libgcc/**",
+        "**/newlib/**",
+        "/startdir/**"
+      ],
+      "svdFile": "${env:HOME}/.vscode/extensions/ti-development-tools.cortex-debug-dp-mspm0-1.0.2/data/MSPM0G350X.svd"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "jlinkSerialNumber",
+      "type": "promptString",
+      "description": "J-Link 序列号，可留空",
+      "default": ""
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "ti-embedded-debug.automaticallyRunDependencyCheck": true,
+  "ti-embedded-debug.openocdExecutablePath": "/home/xy/.config/Texas Instruments/ti-embedded-debug/openocd/1.3.1.50/bin/openocd",
+  "ti-embedded-debug.openocdSearchPath": "/home/xy/.config/Texas Instruments/ti-embedded-debug/openocd/1.3.1.50/share/openocd/scripts",
+  "ti-embedded-debug.armToolchainPath": "/usr/bin",
+  "cmake.generator": "Ninja",
+  "cmake.useCMakePresets": "always",
+  "cmake.defaultConfigurePreset": "gcc-debug",
+  "cmake.defaultBuildPreset": "build",
+  "cmake.buildDirectory": "${workspaceFolder}/build",
+  "cmake.configureOnOpen": false,
+  "cmake.showOptionsMovedNotification": false,
+  "cmake.configureEnvironment": {
+    "MSPM0_SDK_ROOT": "/home/xy/ti/mspm0_sdk_2_10_00_04/mspm0_sdk_2_10_00_04",
+    "JLINK_EXE": "/home/xy/下载/JLink_Linux_V938_x86_64/JLinkExe",
+    "JLINK_GDB_SERVER": "/home/xy/下载/JLink_Linux_V938_x86_64/JLinkGDBServerCLExe",
+    "NUEDC_MINIMAL_DEBUG": "OFF",
+    "NUEDC_NO_ENCODER": "ON"
+  },
+  "terminal.integrated.cwd": "${workspaceFolder}",
+  "debug.openDebug": "openOnDebugBreak",
+  "files.exclude": {
+    "**/.DS_Store": true,
+    "**/build": true,
+    "**/build-test": true
+  },
+  "search.exclude": {
+    "**/build": true,
+    "**/build-test": true
+  },
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.patterns": {
+    "nuedc_car.syscfg": "ti_msp_dl_config.c, ti_msp_dl_config.h, device.opt, device.cmd.genlibs, device.lds.genlibs, device_linker.cmd, device_linker.lds"
+  },
+  "files.associations": {
+    "ti_msp_dl_config.h": "c",
+    "*.syscfg": "javascript"
+  },
+  "cortex-debug.openocdPath": "/home/xy/.config/Texas Instruments/ti-embedded-debug/openocd/1.3.1.50/bin/openocd",
+  "cortex-debug.armToolchainPath": "/usr/bin",
+  "cortex-debug.gdbPath": "/usr/bin/arm-none-eabi-gdb"
+}

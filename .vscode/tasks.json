@@ -1,0 +1,207 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Generate SysConfig",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/generate_syscfg.sh",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Generate SysConfig (Force)",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/generate_syscfg.sh",
+      "args": ["--force"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Check TI Environment",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/check_env.sh",
+      "problemMatcher": []
+    },
+    {
+      "label": "Doctor: Check Env + Probe Board",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Check TI Environment",
+        "Probe TI Board"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Build Firmware",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/build.sh",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Clean Build Directory",
+      "type": "shell",
+      "command": "rm",
+      "args": ["-rf", "${workspaceFolder}/build"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Rebuild Firmware",
+      "dependsOrder": "sequence",
+      "dependsOn": ["Clean Build Directory", "Build Firmware"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Configure CMake",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/build.sh",
+      "args": ["--configure-only"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Probe TI Board",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/probe_board.sh",
+      "problemMatcher": []
+    },
+    {
+      "label": "SDK Install Hint",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/install_sdk_hint.sh",
+      "problemMatcher": []
+    },
+    {
+      "label": "udev Rules Hint",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/install_udev_hint.sh",
+      "problemMatcher": []
+    },
+    {
+      "label": "PID: Install Python deps",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/setup_pid_env.sh",
+      "problemMatcher": []
+    },
+
+    {
+      "label": "PID: Terminal Monitor",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv-pid/bin/python",
+      "args": [
+        "${workspaceFolder}/tools/pid/pid_terminal.py",
+        "--port", "${input:serialPort}",
+        "--ch", "L", "R", "LINE",
+        "--line-raw"
+      ],
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "PID: Terminal Monitor + AI Tune",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv-pid/bin/python",
+      "args": [
+        "${workspaceFolder}/tools/pid/pid_terminal.py",
+        "--port", "${input:serialPort}",
+        "--ch", "L", "R", "LINE",
+        "--line-raw",
+        "--ai-tune",
+        "--duration", "10"
+      ],
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "PID: Tune REPL",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv-pid/bin/python",
+      "args": [
+        "${workspaceFolder}/tools/pid/pid_tune.py",
+        "--port", "${input:serialPort}"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "PID: One-shot Session (monitor + tune)",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/pid_session.sh",
+      "args": ["${input:serialPort}"],
+      "problemMatcher": []
+    },
+
+    {
+      "label": "Serial Monitor (Prompt Port)",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/serial_monitor.sh",
+      "args": ["${input:serialPort}", "115200"],
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Serial Monitor 115200",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/serial_monitor.sh",
+      "args": ["/dev/ttyACM0", "115200"],
+      "isBackground": true,
+      "problemMatcher": []
+    },
+
+    {
+      "label": "Flash Firmware (JLinkExe)",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/flash.sh",
+      "dependsOn": "Build Firmware",
+      "options": { "env": { "FLASH_RUNNER": "jlink" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "Flash Firmware (OpenOCD XDS110)",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/flash.sh",
+      "dependsOn": "Build Firmware",
+      "options": { "env": { "FLASH_RUNNER": "openocd", "OPENOCD_INTERFACE_CFG": "interface/xds110.cfg" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "Flash Firmware (OpenOCD ST-LINK)",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/flash.sh",
+      "dependsOn": "Build Firmware",
+      "options": { "env": { "FLASH_RUNNER": "openocd", "OPENOCD_INTERFACE_CFG": "interface/stlink.cfg" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "Flash Firmware (OpenOCD J-Link)",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/flash.sh",
+      "dependsOn": "Build Firmware",
+      "options": { "env": { "FLASH_RUNNER": "openocd", "OPENOCD_INTERFACE_CFG": "interface/jlink.cfg" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "Build and Flash Firmware (XDS110/loadti)",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/flash.sh",
+      "dependsOn": "Build Firmware",
+      "options": { "env": { "FLASH_RUNNER": "loadti" } },
+      "group": "test",
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "serialPort",
+      "type": "promptString",
+      "description": "串口设备（如 /dev/ttyACM0）",
+      "default": "/dev/ttyACM0"
+    },
+    {
+      "id": "jlinkSerialNumber",
+      "type": "promptString",
+      "description": "J-Link 序列号，可留空",
+      "default": ""
+    }
+  ]
+}

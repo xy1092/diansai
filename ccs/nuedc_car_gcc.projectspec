@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<projectSpec>
+    <applicability>
+        <when>
+            <context
+                deviceFamily="ARM"
+                deviceId="MSPM0G3507"
+            />
+        </when>
+    </applicability>
+
+    <project
+        title="nuedc_car"
+        name="nuedc_car_ticlang"
+        configurations="Debug"
+        toolChain="TICLANG"
+        connection="TIXDS110_Connection.xml"
+        device="MSPM0G3507"
+        ignoreDefaultDeviceSettings="true"
+        ignoreDefaultCCSSettings="true"
+        products="MSPM0-SDK;sysconfig"
+        compilerBuildOptions="
+            -I${PROJECT_ROOT}
+            -I${PROJECT_ROOT}/app
+            -I${PROJECT_ROOT}/bsp
+            -I${PROJECT_ROOT}/middleware
+            -I${PROJECT_ROOT}/${ConfigName}
+            -Og
+            @device.opt
+            -I${COM_TI_MSPM0_SDK_INSTALL_DIR}/source/third_party/CMSIS/Core/Include
+            -I${COM_TI_MSPM0_SDK_INSTALL_DIR}/source
+            -std=c99
+            -gdwarf-3
+            -mcpu=cortex-m0plus
+            -march=thumbv6m
+            -mfloat-abi=soft
+            -mthumb
+            -ffunction-sections
+            -fdata-sections
+            -Wall
+        "
+        linkerBuildOptions="
+            -ldevice.cmd.genlibs
+            -L${COM_TI_MSPM0_SDK_INSTALL_DIR}/source
+            -L${PROJECT_ROOT}
+            -L${PROJECT_BUILD_DIR}/syscfg
+            -Wl,--rom_model
+            -Wl,--warn_sections
+            -L${CG_TOOL_ROOT}/lib
+            -llibc.a
+        "
+        sysConfigBuildOptions="
+            --output .
+            --product ${COM_TI_MSPM0_SDK_INSTALL_DIR}/.metadata/product.json
+            --compiler ticlang
+        "
+        sourceLookupPath="${COM_TI_MSPM0_SDK_INSTALL_DIR}/source/ti/driverlib"
+        description="NUEDC car project shell for CCS + SysConfig on MSPM0G3507">
+        <property name="buildProfile" value="release"/>
+        <property name="isHybrid" value="true"/>
+
+        <file path="../README.md" openOnCreation="true" excludeFromBuild="true" action="link">
+        </file>
+        <file path="../main.c" openOnCreation="false" excludeFromBuild="false" action="link">
+        </file>
+        <file path="../pin_map.h" openOnCreation="false" excludeFromBuild="true" action="link">
+        </file>
+        <file path="../nuedc_car.syscfg" openOnCreation="true" excludeFromBuild="false" action="link">
+        </file>
+
+        <file path="../app/app_main.c" openOnCreation="false" excludeFromBuild="false" action="link" targetDirectory="app">
+        </file>
+        <file path="../app/app_main.h" openOnCreation="false" excludeFromBuild="true" action="link" targetDirectory="app">
+        </file>
+        <file path="../app/app_tracking.c" openOnCreation="false" excludeFromBuild="false" action="link" targetDirectory="app">
+        </file>
+        <file path="../app/app_tracking.h" openOnCreation="false" excludeFromBuild="true" action="link" targetDirectory="app">
+        </file>
+
+        <file path="../bsp/bsp_adc.c" openOnCreation="false" excludeFromBuild="false" action="link" targetDirectory="bsp">
+        </file>
+        <file path="../bsp/bsp_adc.h" openOnCreation="false" excludeFromBuild="true" action="link" targetDirectory="bsp">
+        </file>
+        <file path="../bsp/bsp_encoder.c" openOnCreation="false" excludeFromBuild="false" action="link" targetDirectory="bsp">
+        </file>
+        <file path="../bsp/bsp_encoder.h" openOnCreation="false" excludeFromBuild="true" action="link" targetDirectory="bsp">
+        </file>
+        <file path="../bsp/bsp_imu.c" openOnCreation="false" excludeFromBuild="false" action="link" targetDirectory="bsp">
+        </file>
+        <file path="../bsp/bsp_imu.h" openOnCreation="false" excludeFromBuild="true" action="link" targetDirectory="bsp">
+        </file>
+        <file path="../bsp/bsp_motor.c" openOnCreation="false" excludeFromBuild="false" action="link" targetDirectory="bsp">
+        </file>
+        <file path="../bsp/bsp_motor.h" openOnCreation="false" excludeFromBuild="true" action="link" targetDirectory="bsp">
+        </file>
+        <file path="../bsp/bsp_oled.c" openOnCreation="false" excludeFromBuild="false" action="link" targetDirectory="bsp">
+        </file>
+        <file path="../bsp/bsp_oled.h" openOnCreation="false" excludeFromBuild="true" action="link" targetDirectory="bsp">
+        </file>
+        <file path="../bsp/bsp_uart.c" openOnCreation="false" excludeFromBuild="false" action="link" targetDirectory="bsp">
+        </file>
+        <file path="../bsp/bsp_uart.h" openOnCreation="false" excludeFromBuild="true" action="link" targetDirectory="bsp">
+        </file>
+
+        <file path="../middleware/filter.c" openOnCreation="false" excludeFromBuild="false" action="link" targetDirectory="middleware">
+        </file>
+        <file path="../middleware/filter.h" openOnCreation="false" excludeFromBuild="true" action="link" targetDirectory="middleware">
+        </file>
+        <file path="../middleware/pid.c" openOnCreation="false" excludeFromBuild="false" action="link" targetDirectory="middleware">
+        </file>
+        <file path="../middleware/pid.h" openOnCreation="false" excludeFromBuild="true" action="link" targetDirectory="middleware">
+        </file>
+        <file path="../middleware/protocol.c" openOnCreation="false" excludeFromBuild="false" action="link" targetDirectory="middleware">
+        </file>
+        <file path="../middleware/protocol.h" openOnCreation="false" excludeFromBuild="true" action="link" targetDirectory="middleware">
+        </file>
+        <file path="../middleware/telemetry.c" openOnCreation="false" excludeFromBuild="false" action="link" targetDirectory="middleware">
+        </file>
+        <file path="../middleware/telemetry.h" openOnCreation="false" excludeFromBuild="true" action="link" targetDirectory="middleware">
+        </file>
+    </project>
+</projectSpec>

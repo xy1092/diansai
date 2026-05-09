@@ -1,0 +1,13 @@
+build/
+build-test/
+*.out
+*.bin
+*.hex
+*.map
+*.obj
+*.o
+__pycache__/
+*.pyc
+.ninja_*
+tools/pid/logs/
+tools/pid/.mplconfig/

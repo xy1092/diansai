@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "ms-vscode.cpptools",
+    "marus25.cortex-debug",
+    "ti-development-tools.ti-embedded-development",
+    "ti-development-tools.ti-embedded-debug",
+    "ti-development-tools.cortex-debug-dp-mspm0"
+  ]
+}
