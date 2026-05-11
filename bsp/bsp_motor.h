@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-/* ch: 0 = 左电机, 1 = 右电机; duty: -1000 ~ +1000 */
+/* ch: 0 = 左电机, 1 = 右电机; duty: 0 ~ 1000. 负值会被钳到 0，避免比赛中倒车。 */
 void BSP_Motor_Init(void);
 void BSP_Motor_SetDuty(uint8_t ch, int16_t duty);
 void BSP_Motor_Brake(uint8_t ch);

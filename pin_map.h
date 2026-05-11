@@ -23,7 +23,12 @@
 #endif
 
 /* ---------- Encoder ---------- */
-/* 当前默认不接编码器；需要时关闭 NUEDC_NO_ENCODER 并补 SysConfig。 */
+#define ENC_LEFT_PORT           GPIO_ENCODER_A_PORT
+#define ENC_LEFT_A_PIN          GPIO_ENCODER_A_LEFT_A_PIN
+#define ENC_LEFT_B_PIN          GPIO_ENCODER_A_LEFT_B_PIN
+#define ENC_RIGHT_PORT          GPIO_ENCODER_B_PORT
+#define ENC_RIGHT_A_PIN         GPIO_ENCODER_B_RIGHT_A_PIN
+#define ENC_RIGHT_B_PIN         GPIO_ENCODER_B_RIGHT_B_PIN
 
 /* ---------- IMU / OLED I²C ---------- */
 #ifdef I2C_INST_INST
@@ -33,7 +38,26 @@
 #define SSD1306_I2C_ADDR        0x3C
 
 /* ---------- UART ---------- */
-/* 地猛星板载 CH340 使用 UART0/PA10/PA11。赛题禁止摄像头，不使用 OpenMV。 */
+/* 地猛星板载 CH340 使用 UART0/PA10/PA11。 */
+#ifdef UART_K230_INST
+#define K230_UART_INST          UART_K230_INST
+#define K230_UART_IRQN          UART_K230_INST_INT_IRQN
+#endif
+
+/* ---------- Reserved Extension Ports ---------- */
+#ifdef GPIO_RESERVED_A_ULTRASONIC_TRIG_PIN
+#define ULTRASONIC_PORT         GPIO_RESERVED_A_PORT
+#define ULTRASONIC_TRIG_PIN     GPIO_RESERVED_A_ULTRASONIC_TRIG_PIN
+#define ULTRASONIC_ECHO_PIN     GPIO_RESERVED_A_ULTRASONIC_ECHO_PIN
+#endif
+#ifdef GPIO_RESERVED_A_K230_RESET_PIN
+#define K230_RESET_PORT         GPIO_RESERVED_A_PORT
+#define K230_RESET_PIN          GPIO_RESERVED_A_K230_RESET_PIN
+#endif
+#ifdef GPIO_RESERVED_B_K230_READY_PIN
+#define K230_READY_PORT         GPIO_RESERVED_B_PORT
+#define K230_READY_PIN          GPIO_RESERVED_B_K230_READY_PIN
+#endif
 
 /* ---------- Notify / Start ---------- */
 #define NOTIFY_PORT             GPIO_NOTIFY_PORT
@@ -45,24 +69,15 @@
 #define CONTROL_PORT            GPIO_CONTROL_PORT
 #define CONTROL_START_PIN       GPIO_CONTROL_START_PIN
 
-/* ---------- ADC (7 路灰度 CCD；电池采样为可选项) ---------- */
-#define ADC_BAT_INST            ADC_SENSE_INST
-#ifdef ADC_SENSE_ADCMEM_BAT
-#define ADC_BAT_CHAN            ADC_SENSE_ADCMEM_BAT
-#endif
-#define ADC_CCD0_INST           ADC_SENSE_INST
-#define ADC_CCD1_INST           ADC_SENSE_INST
-#define ADC_CCD2_INST           ADC_SENSE_INST
-#define ADC_CCD3_INST           ADC_SENSE_INST
-#define ADC_CCD4_INST           ADC_SENSE_R_INST
-#define ADC_CCD5_INST           ADC_SENSE_R_INST
-#define ADC_CCD6_INST           ADC_SENSE_R_INST
-#define ADC_CCD0_CHAN           ADC_SENSE_ADCMEM_0
-#define ADC_CCD1_CHAN           ADC_SENSE_ADCMEM_1
-#define ADC_CCD2_CHAN           ADC_SENSE_ADCMEM_2
-#define ADC_CCD3_CHAN           ADC_SENSE_ADCMEM_3
-#define ADC_CCD4_CHAN           ADC_SENSE_R_ADCMEM_0
-#define ADC_CCD5_CHAN           ADC_SENSE_R_ADCMEM_1
-#define ADC_CCD6_CHAN           ADC_SENSE_R_ADCMEM_2
+/* ---------- Digital line sensors (7 路数字灰度) ---------- */
+#define LINE_A_PORT             GPIO_LINE_A_PORT
+#define LINE_CCD0_PIN           GPIO_LINE_A_CCD0_PIN
+#define LINE_CCD1_PIN           GPIO_LINE_A_CCD1_PIN
+#define LINE_CCD2_PIN           GPIO_LINE_A_CCD2_PIN
+#define LINE_CCD3_PIN           GPIO_LINE_A_CCD3_PIN
+#define LINE_CCD4_PIN           GPIO_LINE_A_CCD4_PIN
+#define LINE_B_PORT             GPIO_LINE_B_PORT
+#define LINE_CCD5_PIN           GPIO_LINE_B_CCD5_PIN
+#define LINE_CCD6_PIN           GPIO_LINE_B_CCD6_PIN
 
 #endif /* PIN_MAP_H */

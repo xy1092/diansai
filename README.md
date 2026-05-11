@@ -256,11 +256,34 @@ OpenOCD 官方页面：
 
 - 电机 PWM：`TIMA0`，`PA8/PA9`
 - 电机方向：`PB2/PB3/PB8/PB9`，`STBY=PB6`
-- 7 路灰度：`ADC0 PA27~PA24` + `ADC1 PB17/PB18/PB19`
+- 7 路数字灰度：`PA27/PA26/PA25/PA24/PA7/PB18/PB19`
+- 编码器：左轮 `PA0/PA1`，右轮 `PB20/PB24`
 - I2C：`I2C1 PA16/PA17`
 - 蜂鸣器：`PB7`
 
-当前默认按不接编码器构建，`NUEDC_NO_ENCODER=ON`；程序使用开环 PWM + 灰度循迹 + 估算里程。需要接编码器时，再关闭该选项并补 `ENC_LEFT/ENC_RIGHT` 的 SysConfig。
+扩展接口已预留但默认不参与正式控制：
+
+- 超声波模块：
+  - `PA12` = `ULTRASONIC_TRIG`
+  - `PA13` = `ULTRASONIC_ECHO`
+  - 接口建议：`VCC / GND / TRIG / ECHO`
+  - 如果使用 `HC-SR04` 这类 5V ECHO 模块，`ECHO` 必须先分压或电平转换到 3.3V 再进 `PA13`
+- 庐山派 K230：
+  - `PA21` = `UART2_TX`，接 K230 `RX`
+  - `PA22` = `UART2_RX`，接 K230 `TX`
+  - `PA15` = `K230_RESET`，默认高电平释放复位，低电平保持复位
+  - `PA23` = `K230_READY`，K230 输出状态给 MSPM0
+  - 接口建议：`5V / GND / TX / RX / RESET / READY`
+  - K230 单独供电，和 MSPM0 共地；MSPM0 只收识别结果、偏差、状态等小数据包，不接视频流
+
+扩展 BSP 默认关闭，可按需打开：
+
+```bash
+NUEDC_USE_ULTRASONIC=ON ./scripts/build.sh
+NUEDC_USE_K230=ON ./scripts/build.sh
+```
+
+当前默认按编码器闭环构建，`NUEDC_NO_ENCODER=OFF`，编码器 GPIO 已按 `PA0/PA1`、`PB20/PB24` 配好。只做电机开环调试时，可临时设置 `NUEDC_NO_ENCODER=ON`。
 
 目前这套 `CMake` 方案默认直接消费工程根目录下已有的：
 
@@ -279,10 +302,15 @@ OpenOCD 官方页面：
 - `GPIO_MOTOR_DIR`
 - `I2C_INST`
 - `UART_DEBUG`
-- `ADC_SENSE`
-- `ADC_SENSE_R`
+- `UART_K230`
+- `GPIO_LINE_A`
+- `GPIO_LINE_B`
+- `GPIO_ENCODER_A`
+- `GPIO_ENCODER_B`
+- `GPIO_RESERVED_A`
+- `GPIO_RESERVED_B`
 
-赛题禁止摄像头，正式方案不再使用 `UART_OPENMV` / OpenMV。
+赛题禁止摄像头，正式方案不再使用 `UART_OPENMV` / OpenMV；`UART_K230` 仅作为可拆卸扩展通信口预留，默认不启用。
 
 ### 3. 安装 Linux udev 规则
 

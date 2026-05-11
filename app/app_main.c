@@ -8,6 +8,12 @@
 #include "../bsp/bsp_uart.h"
 #include "../bsp/bsp_adc.h"
 #include "../bsp/bsp_oled.h"
+#ifdef NUEDC_USE_ULTRASONIC
+#include "../bsp/bsp_ultrasonic.h"
+#endif
+#ifdef NUEDC_USE_K230
+#include "../bsp/bsp_k230.h"
+#endif
 #include "../middleware/pid.h"
 #include "../middleware/protocol.h"
 #include "../middleware/telemetry.h"
@@ -394,6 +400,13 @@ static void control_speed_inner(void)
 #endif
 }
 
+static void poll_fast_inputs(void)
+{
+#ifndef NUEDC_NO_ENCODER
+    BSP_Encoder_Poll();
+#endif
+}
+
 static void update_ui(void)
 {
     const TrackInfo_t *trk = App_Tracking_GetInfo();
@@ -445,6 +458,12 @@ void App_Init(void)
     BSP_Uart_Init();
     BSP_Adc_Init();
     BSP_OLED_Init();
+#ifdef NUEDC_USE_ULTRASONIC
+    BSP_Ultrasonic_Init();
+#endif
+#ifdef NUEDC_USE_K230
+    BSP_K230_Init();
+#endif
 
     PID_Init(&pid_spd_L, 1.9f, 0.08f, 0.10f, -1000.0f, 1000.0f);
     PID_Init(&pid_spd_R, 1.9f, 0.08f, 0.10f, -1000.0f, 1000.0f);
@@ -491,6 +510,8 @@ void App_Tick(void)
 
 void App_Loop(void)
 {
+    poll_fast_inputs();
+
     if (flag_1ms) {
         flag_1ms = 0u;
         control_speed_inner();

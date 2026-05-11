@@ -1,6 +1,6 @@
 /**
  * nuedc_car — 完整 SysConfig 配置
- * 芯片：MSPM0G3507 LQFP-48（地猛星开发板）
+ * 芯片：MSPM0G3507（地猛星开发板）
  *
  * 引脚分配：
  *   PA8  = TIMA0_CCP0 (左电机 PWM)
@@ -10,10 +10,12 @@
  *   PB6  = STBY (TB6612 使能)
  *   PB7  = 蜂鸣器
  *   PA16 = I2C1_SDA, PA17 = I2C1_SCL (MPU6050 + OLED)
- *   PA27~PA24 = ADC0 CH0~CH3, PB17/PB18/PB19 = ADC1 CH4~CH6 (7路灰度)
+ *   PA15 = MPU6050 INT
+ *   PA27/PA26/PA25/PA24/PA7/PB18/PB19 = 7 路数字灰度
  *   PA10/PA11 = UART0 (调试串口)
  *   PA14 = LED, PA18 = 按键
- *   PB4/PB5 = 编码器预留 (未启用)
+ *   PA12 = 超声波 TRIG 预留, PA13 = 超声波 ECHO 预留
+ *   PA0/PA1 = 左编码器 A/B, PB20/PB24 = 右编码器 A/B
  */
 
 //@cliArgs --device "MSPM0G350X" --package "LQFP-48(PT)" --part "Default"
@@ -26,17 +28,20 @@ const GPIO          = scripting.addModule("/ti/driverlib/GPIO", {}, false);
 const UART          = scripting.addModule("/ti/driverlib/UART", {}, false);
 const PWM           = scripting.addModule("/ti/driverlib/PWM", {}, false);
 const I2C           = scripting.addModule("/ti/driverlib/I2C", {}, false);
-const ADC12         = scripting.addModule("/ti/driverlib/ADC12", {}, false);
 
 const GPIO_NOTIFY    = GPIO.addInstance();
 const GPIO_CONTROL   = GPIO.addInstance();
 const GPIO_MOTOR_DIR = GPIO.addInstance();
 const GPIO_BUZZER    = GPIO.addInstance();
+const GPIO_IMU       = GPIO.addInstance();
+const GPIO_RESERVED  = GPIO.addInstance();
+const GPIO_LINE_A    = GPIO.addInstance();
+const GPIO_LINE_B    = GPIO.addInstance();
+const GPIO_ENCODER_A = GPIO.addInstance();
+const GPIO_ENCODER_B = GPIO.addInstance();
 const UART_DEBUG     = UART.addInstance();
 const PWM_MOTOR      = PWM.addInstance();
 const I2C_INST       = I2C.addInstance();
-const ADC_SENSE      = ADC12.addInstance();
-const ADC_SENSE_R    = ADC12.addInstance();
 
 ProjectConfig.deviceSpin = "MSPM0G3507";
 
@@ -124,6 +129,35 @@ GPIO_BUZZER.associatedPins[0].assignedPort = "PORTB";
 GPIO_BUZZER.associatedPins[0].assignedPin = "7";
 GPIO_BUZZER.associatedPins[0].initialValue = "CLEARED";
 
+/* ========== MPU6050 INT (PA15) ========== */
+GPIO_IMU.$name = "GPIO_IMU";
+GPIO_IMU.port = "PORTA";
+GPIO_IMU.portSegment = "Lower";
+GPIO_IMU.associatedPins[0].$name = "MPU_INT";
+GPIO_IMU.associatedPins[0].direction = "INPUT";
+GPIO_IMU.associatedPins[0].assignedPort = "PORTA";
+GPIO_IMU.associatedPins[0].assignedPortSegment = "Lower";
+GPIO_IMU.associatedPins[0].assignedPin = "15";
+GPIO_IMU.associatedPins[0].pin.$assign = "PA15";
+
+/* ========== 超声波预留 (PA12 TRIG / PA13 ECHO) ========== */
+GPIO_RESERVED.$name = "GPIO_RESERVED";
+GPIO_RESERVED.port = "PORTA";
+GPIO_RESERVED.portSegment = "Lower";
+GPIO_RESERVED.associatedPins.create(2);
+GPIO_RESERVED.associatedPins[0].$name = "ULTRASONIC_TRIG";
+GPIO_RESERVED.associatedPins[0].assignedPort = "PORTA";
+GPIO_RESERVED.associatedPins[0].assignedPortSegment = "Lower";
+GPIO_RESERVED.associatedPins[0].assignedPin = "12";
+GPIO_RESERVED.associatedPins[0].pin.$assign = "PA12";
+GPIO_RESERVED.associatedPins[0].initialValue = "CLEARED";
+GPIO_RESERVED.associatedPins[1].$name = "ULTRASONIC_ECHO";
+GPIO_RESERVED.associatedPins[1].direction = "INPUT";
+GPIO_RESERVED.associatedPins[1].assignedPort = "PORTA";
+GPIO_RESERVED.associatedPins[1].assignedPortSegment = "Lower";
+GPIO_RESERVED.associatedPins[1].assignedPin = "13";
+GPIO_RESERVED.associatedPins[1].pin.$assign = "PA13";
+
 /* ========== I2C1 — MPU6050 + OLED (PA16/PA17) ========== */
 I2C_INST.$name = "I2C_INST";
 I2C_INST.basicEnableController = true;
@@ -132,37 +166,82 @@ I2C_INST.peripheral.$assign = "I2C1";
 I2C_INST.peripheral.sdaPin.$assign = "PA16";
 I2C_INST.peripheral.sclPin.$assign = "PA17";
 
-/* ========== ADC0 — 左/中左 4 路灰度 (PA27~PA24) ========== */
-ADC_SENSE.$name = "ADC_SENSE";
-ADC_SENSE.samplingOperationMode = "sequence";
-ADC_SENSE.endAdd = 3;
-ADC_SENSE.sampleTime0 = "12.5us";
-ADC_SENSE.adcMem0chansel = "DL_ADC12_INPUT_CHAN_0";
-ADC_SENSE.adcMem1chansel = "DL_ADC12_INPUT_CHAN_1";
-ADC_SENSE.adcMem2chansel = "DL_ADC12_INPUT_CHAN_2";
-ADC_SENSE.adcMem3chansel = "DL_ADC12_INPUT_CHAN_3";
-ADC_SENSE.enabledInterrupts = ["DL_ADC12_INTERRUPT_MEM3_RESULT_LOADED"];
-ADC_SENSE.peripheral.$assign = "ADC0";
-ADC_SENSE.peripheral.adcPin0.$assign = "PA27";
-ADC_SENSE.peripheral.adcPin1.$assign = "PA26";
-ADC_SENSE.peripheral.adcPin2.$assign = "PA25";
-ADC_SENSE.peripheral.adcPin3.$assign = "PA24";
+/* ========== 7 路数字灰度 (PA27/PA26/PA25/PA24/PA7/PB18/PB19) ========== */
+GPIO_LINE_A.$name = "GPIO_LINE_A";
+GPIO_LINE_A.port = "PORTA";
+GPIO_LINE_A.associatedPins.create(5);
+GPIO_LINE_A.associatedPins[0].$name = "CCD0";
+GPIO_LINE_A.associatedPins[0].direction = "INPUT";
+GPIO_LINE_A.associatedPins[0].assignedPort = "PORTA";
+GPIO_LINE_A.associatedPins[0].assignedPin = "27";
+GPIO_LINE_A.associatedPins[0].pin.$assign = "PA27";
+GPIO_LINE_A.associatedPins[1].$name = "CCD1";
+GPIO_LINE_A.associatedPins[1].direction = "INPUT";
+GPIO_LINE_A.associatedPins[1].assignedPort = "PORTA";
+GPIO_LINE_A.associatedPins[1].assignedPin = "26";
+GPIO_LINE_A.associatedPins[1].pin.$assign = "PA26";
+GPIO_LINE_A.associatedPins[2].$name = "CCD2";
+GPIO_LINE_A.associatedPins[2].direction = "INPUT";
+GPIO_LINE_A.associatedPins[2].assignedPort = "PORTA";
+GPIO_LINE_A.associatedPins[2].assignedPin = "25";
+GPIO_LINE_A.associatedPins[2].pin.$assign = "PA25";
+GPIO_LINE_A.associatedPins[3].$name = "CCD3";
+GPIO_LINE_A.associatedPins[3].direction = "INPUT";
+GPIO_LINE_A.associatedPins[3].assignedPort = "PORTA";
+GPIO_LINE_A.associatedPins[3].assignedPin = "24";
+GPIO_LINE_A.associatedPins[3].pin.$assign = "PA24";
+GPIO_LINE_A.associatedPins[4].$name = "CCD4";
+GPIO_LINE_A.associatedPins[4].direction = "INPUT";
+GPIO_LINE_A.associatedPins[4].assignedPort = "PORTA";
+GPIO_LINE_A.associatedPins[4].assignedPin = "7";
+GPIO_LINE_A.associatedPins[4].pin.$assign = "PA7";
 
-/* ========== ADC1 — 中右/右 3 路灰度 (PB17/PB18/PB19) ========== */
-ADC_SENSE_R.$name = "ADC_SENSE_R";
-ADC_SENSE_R.samplingOperationMode = "sequence";
-ADC_SENSE_R.endAdd = 2;
-ADC_SENSE_R.sampleTime0 = "12.5us";
-ADC_SENSE_R.adcMem0chansel = "DL_ADC12_INPUT_CHAN_4";
-ADC_SENSE_R.adcMem1chansel = "DL_ADC12_INPUT_CHAN_5";
-ADC_SENSE_R.adcMem2chansel = "DL_ADC12_INPUT_CHAN_6";
-ADC_SENSE_R.enabledInterrupts = ["DL_ADC12_INTERRUPT_MEM2_RESULT_LOADED"];
-ADC_SENSE_R.peripheral.$assign = "ADC1";
-ADC_SENSE_R.peripheral.adcPin4.$assign = "PB17";
-ADC_SENSE_R.peripheral.adcPin5.$assign = "PB18";
-ADC_SENSE_R.peripheral.adcPin6.$assign = "PB19";
+GPIO_LINE_B.$name = "GPIO_LINE_B";
+GPIO_LINE_B.port = "PORTB";
+GPIO_LINE_B.associatedPins.create(2);
+GPIO_LINE_B.associatedPins[0].$name = "CCD5";
+GPIO_LINE_B.associatedPins[0].direction = "INPUT";
+GPIO_LINE_B.associatedPins[0].assignedPort = "PORTB";
+GPIO_LINE_B.associatedPins[0].assignedPin = "18";
+GPIO_LINE_B.associatedPins[0].pin.$assign = "PB18";
+GPIO_LINE_B.associatedPins[1].$name = "CCD6";
+GPIO_LINE_B.associatedPins[1].direction = "INPUT";
+GPIO_LINE_B.associatedPins[1].assignedPort = "PORTB";
+GPIO_LINE_B.associatedPins[1].assignedPin = "19";
+GPIO_LINE_B.associatedPins[1].pin.$assign = "PB19";
+
+/* ========== 编码器 GPIO 输入 (PA0/PA1, PB20/PB24) ========== */
+GPIO_ENCODER_A.$name = "GPIO_ENCODER_A";
+GPIO_ENCODER_A.port = "PORTA";
+GPIO_ENCODER_A.associatedPins.create(2);
+GPIO_ENCODER_A.associatedPins[0].$name = "LEFT_A";
+GPIO_ENCODER_A.associatedPins[0].direction = "INPUT";
+GPIO_ENCODER_A.associatedPins[0].assignedPort = "PORTA";
+GPIO_ENCODER_A.associatedPins[0].assignedPin = "0";
+GPIO_ENCODER_A.associatedPins[0].pin.$assign = "PA0";
+GPIO_ENCODER_A.associatedPins[1].$name = "LEFT_B";
+GPIO_ENCODER_A.associatedPins[1].direction = "INPUT";
+GPIO_ENCODER_A.associatedPins[1].assignedPort = "PORTA";
+GPIO_ENCODER_A.associatedPins[1].assignedPin = "1";
+GPIO_ENCODER_A.associatedPins[1].pin.$assign = "PA1";
+
+GPIO_ENCODER_B.$name = "GPIO_ENCODER_B";
+GPIO_ENCODER_B.port = "PORTB";
+GPIO_ENCODER_B.associatedPins.create(2);
+GPIO_ENCODER_B.associatedPins[0].$name = "RIGHT_A";
+GPIO_ENCODER_B.associatedPins[0].direction = "INPUT";
+GPIO_ENCODER_B.associatedPins[0].assignedPort = "PORTB";
+GPIO_ENCODER_B.associatedPins[0].assignedPin = "20";
+GPIO_ENCODER_B.associatedPins[0].pin.$assign = "PB20";
+GPIO_ENCODER_B.associatedPins[1].$name = "RIGHT_B";
+GPIO_ENCODER_B.associatedPins[1].direction = "INPUT";
+GPIO_ENCODER_B.associatedPins[1].assignedPort = "PORTB";
+GPIO_ENCODER_B.associatedPins[1].assignedPin = "24";
+GPIO_ENCODER_B.associatedPins[1].pin.$assign = "PB24";
 
 /*
- * 编码器预留引脚：PB4 (TIMG6_CCP0), PB5 (TIMG6_CCP1)
- * 如需启用，添加 TIMG 实例并配置 QEI 模式。
+ * PA0/PA1 是 5V 容限开漏 IO，用作编码器时必须保持输入模式。
+ * 灰度模块为数字输出型；若后续改用模拟灰度，CCD4 不能继续用 PA7。
+ * 超声波接口预留：PA12(TRIG), PA13(ECHO)。ECHO 若来自 5V 模块，
+ * 必须先分压/电平转换到 3.3V。
  */

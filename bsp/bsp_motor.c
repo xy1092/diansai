@@ -35,7 +35,7 @@ void BSP_Motor_Init(void)
 void BSP_Motor_SetDuty(uint8_t ch, int16_t duty)
 {
     if (duty >  PWM_MAX) duty =  PWM_MAX;
-    if (duty < -(int16_t)PWM_MAX) duty = -(int16_t)PWM_MAX;
+    if (duty < 0) duty = 0;
 
     set_dir(ch, duty);
 

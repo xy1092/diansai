@@ -15,7 +15,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "NUEDC_MINIMAL_DEBUG": "OFF",
-        "NUEDC_NO_ENCODER": "ON"
+        "NUEDC_NO_ENCODER": "OFF"
       }
     },
     {

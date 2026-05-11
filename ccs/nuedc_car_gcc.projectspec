@@ -97,6 +97,14 @@
         </file>
         <file path="../bsp/bsp_oled.h" openOnCreation="false" excludeFromBuild="true" action="link" targetDirectory="bsp">
         </file>
+        <file path="../bsp/bsp_ultrasonic.c" openOnCreation="false" excludeFromBuild="true" action="link" targetDirectory="bsp">
+        </file>
+        <file path="../bsp/bsp_ultrasonic.h" openOnCreation="false" excludeFromBuild="true" action="link" targetDirectory="bsp">
+        </file>
+        <file path="../bsp/bsp_k230.c" openOnCreation="false" excludeFromBuild="true" action="link" targetDirectory="bsp">
+        </file>
+        <file path="../bsp/bsp_k230.h" openOnCreation="false" excludeFromBuild="true" action="link" targetDirectory="bsp">
+        </file>
         <file path="../bsp/bsp_uart.c" openOnCreation="false" excludeFromBuild="false" action="link" targetDirectory="bsp">
         </file>
         <file path="../bsp/bsp_uart.h" openOnCreation="false" excludeFromBuild="true" action="link" targetDirectory="bsp">

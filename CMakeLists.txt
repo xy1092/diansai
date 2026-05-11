@@ -4,7 +4,9 @@ project(nuedc_car LANGUAGES C ASM)
 
 set(CMAKE_EXECUTABLE_SUFFIX ".out")
 option(NUEDC_MINIMAL_DEBUG "Build with BSP/protocol stubs to enable breakpoint debugging before full pinmux is ready" OFF)
-option(NUEDC_NO_ENCODER "Build for open-loop motor control without wheel encoders" ON)
+option(NUEDC_NO_ENCODER "Build for open-loop motor control without wheel encoders" OFF)
+option(NUEDC_USE_ULTRASONIC "Enable reserved ultrasonic interface BSP on PA12/PA13" OFF)
+option(NUEDC_USE_K230 "Enable reserved K230 UART2 interface BSP on PA21/PA22" OFF)
 
 if(DEFINED ENV{MSPM0_SDK_ROOT} AND NOT "$ENV{MSPM0_SDK_ROOT}" STREQUAL "")
   set(MSPM0_SDK_ROOT "$ENV{MSPM0_SDK_ROOT}" CACHE PATH "Path to the MSPM0 SDK root")
@@ -138,6 +140,12 @@ else()
   if(NOT NUEDC_NO_ENCODER)
     list(APPEND NUEDC_APP_SOURCES bsp/bsp_encoder.c)
   endif()
+  if(NUEDC_USE_ULTRASONIC)
+    list(APPEND NUEDC_APP_SOURCES bsp/bsp_ultrasonic.c)
+  endif()
+  if(NUEDC_USE_K230)
+    list(APPEND NUEDC_APP_SOURCES bsp/bsp_k230.c)
+  endif()
 endif()
 
 add_executable(nuedc_car ${NUEDC_APP_SOURCES})
@@ -155,6 +163,8 @@ target_compile_definitions(nuedc_car PRIVATE
   __MSPM0G3507__
   $<$<BOOL:${NUEDC_MINIMAL_DEBUG}>:NUEDC_MINIMAL_DEBUG=1>
   $<$<BOOL:${NUEDC_NO_ENCODER}>:NUEDC_NO_ENCODER=1>
+  $<$<BOOL:${NUEDC_USE_ULTRASONIC}>:NUEDC_USE_ULTRASONIC=1>
+  $<$<BOOL:${NUEDC_USE_K230}>:NUEDC_USE_K230=1>
 )
 
 target_compile_options(nuedc_car PRIVATE

@@ -135,67 +135,6 @@ extern "C" {
 
 
 
-/* Defines for ADC_SENSE */
-#define ADC_SENSE_INST                                                      ADC0
-#define ADC_SENSE_INST_IRQHandler                                ADC0_IRQHandler
-#define ADC_SENSE_INST_INT_IRQN                                  (ADC0_INT_IRQn)
-#define ADC_SENSE_ADCMEM_0                                    DL_ADC12_MEM_IDX_0
-#define ADC_SENSE_ADCMEM_0_REF                   DL_ADC12_REFERENCE_VOLTAGE_VDDA
-#define ADC_SENSE_ADCMEM_0_REF_VOLTAGE_V                                     3.3
-#define ADC_SENSE_ADCMEM_1                                    DL_ADC12_MEM_IDX_1
-#define ADC_SENSE_ADCMEM_1_REF                   DL_ADC12_REFERENCE_VOLTAGE_VDDA
-#define ADC_SENSE_ADCMEM_1_REF_VOLTAGE_V                                     3.3
-#define ADC_SENSE_ADCMEM_2                                    DL_ADC12_MEM_IDX_2
-#define ADC_SENSE_ADCMEM_2_REF                   DL_ADC12_REFERENCE_VOLTAGE_VDDA
-#define ADC_SENSE_ADCMEM_2_REF_VOLTAGE_V                                     3.3
-#define ADC_SENSE_ADCMEM_3                                    DL_ADC12_MEM_IDX_3
-#define ADC_SENSE_ADCMEM_3_REF                   DL_ADC12_REFERENCE_VOLTAGE_VDDA
-#define ADC_SENSE_ADCMEM_3_REF_VOLTAGE_V                                     3.3
-#define GPIO_ADC_SENSE_C0_PORT                                             GPIOA
-#define GPIO_ADC_SENSE_C0_PIN                                     DL_GPIO_PIN_27
-#define GPIO_ADC_SENSE_IOMUX_C0                                  (IOMUX_PINCM60)
-#define GPIO_ADC_SENSE_IOMUX_C0_FUNC              (IOMUX_PINCM60_PF_UNCONNECTED)
-#define GPIO_ADC_SENSE_C1_PORT                                             GPIOA
-#define GPIO_ADC_SENSE_C1_PIN                                     DL_GPIO_PIN_26
-#define GPIO_ADC_SENSE_IOMUX_C1                                  (IOMUX_PINCM59)
-#define GPIO_ADC_SENSE_IOMUX_C1_FUNC              (IOMUX_PINCM59_PF_UNCONNECTED)
-#define GPIO_ADC_SENSE_C2_PORT                                             GPIOA
-#define GPIO_ADC_SENSE_C2_PIN                                     DL_GPIO_PIN_25
-#define GPIO_ADC_SENSE_IOMUX_C2                                  (IOMUX_PINCM55)
-#define GPIO_ADC_SENSE_IOMUX_C2_FUNC              (IOMUX_PINCM55_PF_UNCONNECTED)
-#define GPIO_ADC_SENSE_C3_PORT                                             GPIOA
-#define GPIO_ADC_SENSE_C3_PIN                                     DL_GPIO_PIN_24
-#define GPIO_ADC_SENSE_IOMUX_C3                                  (IOMUX_PINCM54)
-#define GPIO_ADC_SENSE_IOMUX_C3_FUNC              (IOMUX_PINCM54_PF_UNCONNECTED)
-
-/* Defines for ADC_SENSE_R */
-#define ADC_SENSE_R_INST                                                    ADC1
-#define ADC_SENSE_R_INST_IRQHandler                              ADC1_IRQHandler
-#define ADC_SENSE_R_INST_INT_IRQN                                (ADC1_INT_IRQn)
-#define ADC_SENSE_R_ADCMEM_0                                  DL_ADC12_MEM_IDX_0
-#define ADC_SENSE_R_ADCMEM_0_REF                 DL_ADC12_REFERENCE_VOLTAGE_VDDA
-#define ADC_SENSE_R_ADCMEM_0_REF_VOLTAGE_V                                     3.3
-#define ADC_SENSE_R_ADCMEM_1                                  DL_ADC12_MEM_IDX_1
-#define ADC_SENSE_R_ADCMEM_1_REF                 DL_ADC12_REFERENCE_VOLTAGE_VDDA
-#define ADC_SENSE_R_ADCMEM_1_REF_VOLTAGE_V                                     3.3
-#define ADC_SENSE_R_ADCMEM_2                                  DL_ADC12_MEM_IDX_2
-#define ADC_SENSE_R_ADCMEM_2_REF                 DL_ADC12_REFERENCE_VOLTAGE_VDDA
-#define ADC_SENSE_R_ADCMEM_2_REF_VOLTAGE_V                                     3.3
-#define GPIO_ADC_SENSE_R_C4_PORT                                           GPIOB
-#define GPIO_ADC_SENSE_R_C4_PIN                                   DL_GPIO_PIN_17
-#define GPIO_ADC_SENSE_R_IOMUX_C4                                (IOMUX_PINCM43)
-#define GPIO_ADC_SENSE_R_IOMUX_C4_FUNC            (IOMUX_PINCM43_PF_UNCONNECTED)
-#define GPIO_ADC_SENSE_R_C5_PORT                                           GPIOB
-#define GPIO_ADC_SENSE_R_C5_PIN                                   DL_GPIO_PIN_18
-#define GPIO_ADC_SENSE_R_IOMUX_C5                                (IOMUX_PINCM44)
-#define GPIO_ADC_SENSE_R_IOMUX_C5_FUNC            (IOMUX_PINCM44_PF_UNCONNECTED)
-#define GPIO_ADC_SENSE_R_C6_PORT                                           GPIOB
-#define GPIO_ADC_SENSE_R_C6_PIN                                   DL_GPIO_PIN_19
-#define GPIO_ADC_SENSE_R_IOMUX_C6                                (IOMUX_PINCM45)
-#define GPIO_ADC_SENSE_R_IOMUX_C6_FUNC            (IOMUX_PINCM45_PF_UNCONNECTED)
-
-
-
 /* Port definition for Pin Group GPIO_NOTIFY */
 #define GPIO_NOTIFY_PORT                                                 (GPIOA)
 
@@ -214,6 +153,12 @@ extern "C" {
 /* Defines for BUZZ: GPIOB.7 with pinCMx 24 on package pin 21 */
 #define GPIO_BUZZER_BUZZ_PIN                                     (DL_GPIO_PIN_7)
 #define GPIO_BUZZER_BUZZ_IOMUX                                   (IOMUX_PINCM24)
+/* Port definition for Pin Group GPIO_IMU */
+#define GPIO_IMU_PORT                                                    (GPIOA)
+
+/* Defines for MPU_INT: GPIOA.15 with pinCMx 37 on package pin 30 */
+#define GPIO_IMU_MPU_INT_PIN                                    (DL_GPIO_PIN_15)
+#define GPIO_IMU_MPU_INT_IOMUX                                   (IOMUX_PINCM37)
 /* Port definition for Pin Group GPIO_MOTOR_DIR */
 #define GPIO_MOTOR_DIR_PORT                                              (GPIOB)
 
@@ -232,6 +177,60 @@ extern "C" {
 /* Defines for STBY: GPIOB.6 with pinCMx 23 on package pin 20 */
 #define GPIO_MOTOR_DIR_STBY_PIN                                  (DL_GPIO_PIN_6)
 #define GPIO_MOTOR_DIR_STBY_IOMUX                                (IOMUX_PINCM23)
+/* Port definition for Pin Group GPIO_RESERVED */
+#define GPIO_RESERVED_PORT                                               (GPIOA)
+
+/* Defines for ULTRASONIC_TRIG: GPIOA.12 with pinCMx 34 on package pin 27 */
+#define GPIO_RESERVED_ULTRASONIC_TRIG_PIN                       (DL_GPIO_PIN_12)
+#define GPIO_RESERVED_ULTRASONIC_TRIG_IOMUX                      (IOMUX_PINCM34)
+/* Defines for ULTRASONIC_ECHO: GPIOA.13 with pinCMx 35 on package pin 28 */
+#define GPIO_RESERVED_ULTRASONIC_ECHO_PIN                       (DL_GPIO_PIN_13)
+#define GPIO_RESERVED_ULTRASONIC_ECHO_IOMUX                      (IOMUX_PINCM35)
+/* Port definition for Pin Group GPIO_LINE_A */
+#define GPIO_LINE_A_PORT                                                 (GPIOA)
+
+/* Defines for CCD0: GPIOA.27 with pinCMx 60 on package pin 47 */
+#define GPIO_LINE_A_CCD0_PIN                                    (DL_GPIO_PIN_27)
+#define GPIO_LINE_A_CCD0_IOMUX                                   (IOMUX_PINCM60)
+/* Defines for CCD1: GPIOA.26 with pinCMx 59 on package pin 46 */
+#define GPIO_LINE_A_CCD1_PIN                                    (DL_GPIO_PIN_26)
+#define GPIO_LINE_A_CCD1_IOMUX                                   (IOMUX_PINCM59)
+/* Defines for CCD2: GPIOA.25 with pinCMx 55 on package pin 45 */
+#define GPIO_LINE_A_CCD2_PIN                                    (DL_GPIO_PIN_25)
+#define GPIO_LINE_A_CCD2_IOMUX                                   (IOMUX_PINCM55)
+/* Defines for CCD3: GPIOA.24 with pinCMx 54 on package pin 44 */
+#define GPIO_LINE_A_CCD3_PIN                                    (DL_GPIO_PIN_24)
+#define GPIO_LINE_A_CCD3_IOMUX                                   (IOMUX_PINCM54)
+/* Defines for CCD4: GPIOA.7 with pinCMx 14 on package pin 13 */
+#define GPIO_LINE_A_CCD4_PIN                                     (DL_GPIO_PIN_7)
+#define GPIO_LINE_A_CCD4_IOMUX                                   (IOMUX_PINCM14)
+/* Port definition for Pin Group GPIO_LINE_B */
+#define GPIO_LINE_B_PORT                                                 (GPIOB)
+
+/* Defines for CCD5: GPIOB.18 with pinCMx 44 on package pin 37 */
+#define GPIO_LINE_B_CCD5_PIN                                    (DL_GPIO_PIN_18)
+#define GPIO_LINE_B_CCD5_IOMUX                                   (IOMUX_PINCM44)
+/* Defines for CCD6: GPIOB.19 with pinCMx 45 on package pin 38 */
+#define GPIO_LINE_B_CCD6_PIN                                    (DL_GPIO_PIN_19)
+#define GPIO_LINE_B_CCD6_IOMUX                                   (IOMUX_PINCM45)
+/* Port definition for Pin Group GPIO_ENCODER_A */
+#define GPIO_ENCODER_A_PORT                                              (GPIOA)
+
+/* Defines for LEFT_A: GPIOA.0 with pinCMx 1 on package pin 1 */
+#define GPIO_ENCODER_A_LEFT_A_PIN                                (DL_GPIO_PIN_0)
+#define GPIO_ENCODER_A_LEFT_A_IOMUX                               (IOMUX_PINCM1)
+/* Defines for LEFT_B: GPIOA.1 with pinCMx 2 on package pin 2 */
+#define GPIO_ENCODER_A_LEFT_B_PIN                                (DL_GPIO_PIN_1)
+#define GPIO_ENCODER_A_LEFT_B_IOMUX                               (IOMUX_PINCM2)
+/* Port definition for Pin Group GPIO_ENCODER_B */
+#define GPIO_ENCODER_B_PORT                                              (GPIOB)
+
+/* Defines for RIGHT_A: GPIOB.20 with pinCMx 48 on package pin 41 */
+#define GPIO_ENCODER_B_RIGHT_A_PIN                              (DL_GPIO_PIN_20)
+#define GPIO_ENCODER_B_RIGHT_A_IOMUX                             (IOMUX_PINCM48)
+/* Defines for RIGHT_B: GPIOB.24 with pinCMx 52 on package pin 42 */
+#define GPIO_ENCODER_B_RIGHT_B_PIN                              (DL_GPIO_PIN_24)
+#define GPIO_ENCODER_B_RIGHT_B_IOMUX                             (IOMUX_PINCM52)
 
 
 /* clang-format on */
@@ -244,8 +243,6 @@ void SYSCFG_DL_SYSCTL_CLK_init(void);
 void SYSCFG_DL_PWM_MOTOR_init(void);
 void SYSCFG_DL_I2C_INST_init(void);
 void SYSCFG_DL_UART_DEBUG_init(void);
-void SYSCFG_DL_ADC_SENSE_init(void);
-void SYSCFG_DL_ADC_SENSE_R_init(void);
 
 
 bool SYSCFG_DL_saveConfiguration(void);
