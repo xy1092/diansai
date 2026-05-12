@@ -1,6 +1,6 @@
 #include "protocol.h"
 #include "../bsp/bsp_uart.h"
-#include "ti_msp_dl_config.h"
+#include "../pin_map.h"
 
 #define MAX_PAYLOAD 32
 
@@ -17,6 +17,7 @@ static ProtoVision_t s_vision;
 static uint8_t       s_vision_fresh = 0;
 static uint8_t       s_start_flag   = 0;
 static uint8_t       s_mission_req  = 0;
+static uint8_t       s_stop_flag    = 0;
 
 extern volatile uint32_t g_tick_ms;
 
@@ -30,16 +31,39 @@ void Proto_Init(void)
 
 void Proto_Poll(void)
 {
-#if defined(GPIO_CONTROL_PORT) && defined(GPIO_CONTROL_START_PIN)
+#if defined(CONTROL_PORT) && defined(CONTROL_START_PIN)
     static uint8_t last_pressed = 0u;
     static uint32_t last_ms = 0u;
-    uint8_t pressed = (DL_GPIO_readPins(GPIO_CONTROL_PORT, GPIO_CONTROL_START_PIN) != 0u) ? 1u : 0u;
+    uint8_t pressed = (DL_GPIO_readPins(CONTROL_PORT, CONTROL_START_PIN) == 0u) ? 1u : 0u;
 
     if (pressed && !last_pressed && (g_tick_ms - last_ms) >= 120u) {
         s_start_flag = 1u;
         last_ms = g_tick_ms;
     }
     last_pressed = pressed;
+#endif
+
+#if defined(CONTROL_MODE0_PIN) && defined(CONTROL_MODE1_PIN)
+    {
+        uint8_t mode = 0u;
+        if (DL_GPIO_readPins(CONTROL_PORT, CONTROL_MODE0_PIN) == 0u) mode |= 1u;
+        if (DL_GPIO_readPins(CONTROL_PORT, CONTROL_MODE1_PIN) == 0u) mode |= 2u;
+        s_mission_req = (uint8_t)(mode + 1u);
+    }
+#endif
+
+#if defined(CONTROL_STOP_PIN)
+    {
+        static uint8_t last_stop = 0u;
+        static uint32_t last_stop_ms = 0u;
+        uint8_t stop_pressed = (DL_GPIO_readPins(CONTROL_PORT, CONTROL_STOP_PIN) == 0u) ? 1u : 0u;
+
+        if (stop_pressed && !last_stop && (g_tick_ms - last_stop_ms) >= 120u) {
+            s_stop_flag = 1u;
+            last_stop_ms = g_tick_ms;
+        }
+        last_stop = stop_pressed;
+    }
 #endif
 }
 
@@ -63,6 +87,15 @@ uint8_t Proto_GetMissionRequest(void)
         uint8_t req = s_mission_req;
         s_mission_req = 0;
         return req;
+    }
+    return 0;
+}
+
+uint8_t Proto_GetStopFlag(void)
+{
+    if (s_stop_flag) {
+        s_stop_flag = 0;
+        return 1;
     }
     return 0;
 }
@@ -91,6 +124,11 @@ static void on_rx_byte(uint8_t b)
     }
     if (b == 's' || b == 'S') {
         s_start_flag = 1u;
+        s_state = PS_SYNC1;
+        return;
+    }
+    if (b == 'x' || b == 'X') {
+        s_stop_flag = 1u;
         s_state = PS_SYNC1;
         return;
     }

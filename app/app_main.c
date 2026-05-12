@@ -229,6 +229,16 @@ static void finish_mission(void)
     announce_event("STOP");
 }
 
+static void stop_to_ready(void)
+{
+    s_state = STATE_READY;
+    reset_motion_targets();
+    BSP_Motor_Brake(0);
+    BSP_Motor_Brake(1);
+    s_segment_started = 0u;
+    announce_event("STOP");
+}
+
 static void next_segment(void)
 {
     uint8_t count;
@@ -529,10 +539,14 @@ void App_Loop(void)
 
     Proto_Poll();
 
+    if (Proto_GetStopFlag()) {
+        stop_to_ready();
+    }
+
     s_line_bias = App_Tracking_GetInfo()->bias;
     Telem_Tick(g_tick_ms);
 
-    if (s_state == STATE_READY) service_ready_state();
+    if (s_state == STATE_READY || s_state == STATE_STOP) service_ready_state();
 }
 
 AppState_t App_GetState(void)

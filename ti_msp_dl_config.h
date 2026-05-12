@@ -141,12 +141,6 @@ extern "C" {
 /* Defines for LED: GPIOA.14 with pinCMx 36 on package pin 29 */
 #define GPIO_NOTIFY_LED_PIN                                     (DL_GPIO_PIN_14)
 #define GPIO_NOTIFY_LED_IOMUX                                    (IOMUX_PINCM36)
-/* Port definition for Pin Group GPIO_CONTROL */
-#define GPIO_CONTROL_PORT                                                (GPIOA)
-
-/* Defines for START: GPIOA.18 with pinCMx 40 on package pin 33 */
-#define GPIO_CONTROL_START_PIN                                  (DL_GPIO_PIN_18)
-#define GPIO_CONTROL_START_IOMUX                                 (IOMUX_PINCM40)
 /* Port definition for Pin Group GPIO_BUZZER */
 #define GPIO_BUZZER_PORT                                                 (GPIOB)
 
@@ -159,6 +153,21 @@ extern "C" {
 /* Defines for MPU_INT: GPIOA.15 with pinCMx 37 on package pin 30 */
 #define GPIO_IMU_MPU_INT_PIN                                    (DL_GPIO_PIN_15)
 #define GPIO_IMU_MPU_INT_IOMUX                                   (IOMUX_PINCM37)
+/* Port definition for Pin Group GPIO_CONTROL */
+#define GPIO_CONTROL_PORT                                                (GPIOA)
+
+/* Defines for START: GPIOA.18 with pinCMx 40 on package pin 33 */
+#define GPIO_CONTROL_START_PIN                                  (DL_GPIO_PIN_18)
+#define GPIO_CONTROL_START_IOMUX                                 (IOMUX_PINCM40)
+/* Defines for MODE0: GPIOA.21 with pinCMx 46 on package pin 39 */
+#define GPIO_CONTROL_MODE0_PIN                                  (DL_GPIO_PIN_21)
+#define GPIO_CONTROL_MODE0_IOMUX                                 (IOMUX_PINCM46)
+/* Defines for MODE1: GPIOA.22 with pinCMx 47 on package pin 40 */
+#define GPIO_CONTROL_MODE1_PIN                                  (DL_GPIO_PIN_22)
+#define GPIO_CONTROL_MODE1_IOMUX                                 (IOMUX_PINCM47)
+/* Defines for STOP: GPIOA.28 with pinCMx 3 on package pin 3 */
+#define GPIO_CONTROL_STOP_PIN                                   (DL_GPIO_PIN_28)
+#define GPIO_CONTROL_STOP_IOMUX                                   (IOMUX_PINCM3)
 /* Port definition for Pin Group GPIO_MOTOR_DIR */
 #define GPIO_MOTOR_DIR_PORT                                              (GPIOB)
 

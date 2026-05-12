@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-/* 板载 CH340 调试串口控制：'1'~'4' 选任务，'s'/'S' 启动。 */
+/* 板载 CH340 调试串口控制：'1'~'4' 选任务，'s'/'S' 启动。实体 MODE0/MODE1 拨码低电平有效。 */
 
 typedef struct {
     int16_t center_x;
@@ -21,5 +21,6 @@ ProtoVision_t  Proto_GetVision(void);
 
 uint8_t        Proto_GetStartFlag(void);
 uint8_t        Proto_GetMissionRequest(void);
+uint8_t        Proto_GetStopFlag(void);
 
 #endif

@@ -68,6 +68,15 @@
 #endif
 #define CONTROL_PORT            GPIO_CONTROL_PORT
 #define CONTROL_START_PIN       GPIO_CONTROL_START_PIN
+#ifdef GPIO_CONTROL_MODE0_PIN
+#define CONTROL_MODE0_PIN       GPIO_CONTROL_MODE0_PIN
+#endif
+#ifdef GPIO_CONTROL_MODE1_PIN
+#define CONTROL_MODE1_PIN       GPIO_CONTROL_MODE1_PIN
+#endif
+#ifdef GPIO_CONTROL_STOP_PIN
+#define CONTROL_STOP_PIN        GPIO_CONTROL_STOP_PIN
+#endif
 
 /* ---------- Digital line sensors (7 路数字灰度) ---------- */
 #define LINE_A_PORT             GPIO_LINE_A_PORT

@@ -13,7 +13,7 @@
  *   PA15 = MPU6050 INT
  *   PA27/PA26/PA25/PA24/PA7/PB18/PB19 = 7 路数字灰度
  *   PA10/PA11 = UART0 (调试串口)
- *   PA14 = LED, PA18 = 按键
+ *   PA14 = LED, PA18 = START, PA21/PA22 = MODE0/MODE1, PA28 = STOP
  *   PA12 = 超声波 TRIG 预留, PA13 = 超声波 ECHO 预留
  *   PA0/PA1 = 左编码器 A/B, PB20/PB24 = 右编码器 A/B
  */
@@ -61,16 +61,39 @@ GPIO_NOTIFY.associatedPins[0].assignedPin = "14";
 GPIO_NOTIFY.associatedPins[0].pin.$assign = "PA14";
 GPIO_NOTIFY.associatedPins[0].initialValue = "CLEARED";
 
-/* ========== 板载按键 (PA18) ========== */
+/* ========== 按键/拨码 (PA18 START, PA21/PA22 MODE, PA28 STOP) ========== */
 GPIO_CONTROL.$name = "GPIO_CONTROL";
 GPIO_CONTROL.port = "PORTA";
 GPIO_CONTROL.portSegment = "Upper";
+GPIO_CONTROL.associatedPins.create(4);
 GPIO_CONTROL.associatedPins[0].$name = "START";
 GPIO_CONTROL.associatedPins[0].direction = "INPUT";
 GPIO_CONTROL.associatedPins[0].assignedPort = "PORTA";
 GPIO_CONTROL.associatedPins[0].assignedPortSegment = "Upper";
 GPIO_CONTROL.associatedPins[0].assignedPin = "18";
 GPIO_CONTROL.associatedPins[0].pin.$assign = "PA18";
+GPIO_CONTROL.associatedPins[0].internalResistor = "PULL_UP";
+GPIO_CONTROL.associatedPins[1].$name = "MODE0";
+GPIO_CONTROL.associatedPins[1].direction = "INPUT";
+GPIO_CONTROL.associatedPins[1].assignedPort = "PORTA";
+GPIO_CONTROL.associatedPins[1].assignedPortSegment = "Upper";
+GPIO_CONTROL.associatedPins[1].assignedPin = "21";
+GPIO_CONTROL.associatedPins[1].pin.$assign = "PA21";
+GPIO_CONTROL.associatedPins[1].internalResistor = "PULL_UP";
+GPIO_CONTROL.associatedPins[2].$name = "MODE1";
+GPIO_CONTROL.associatedPins[2].direction = "INPUT";
+GPIO_CONTROL.associatedPins[2].assignedPort = "PORTA";
+GPIO_CONTROL.associatedPins[2].assignedPortSegment = "Upper";
+GPIO_CONTROL.associatedPins[2].assignedPin = "22";
+GPIO_CONTROL.associatedPins[2].pin.$assign = "PA22";
+GPIO_CONTROL.associatedPins[2].internalResistor = "PULL_UP";
+GPIO_CONTROL.associatedPins[3].$name = "STOP";
+GPIO_CONTROL.associatedPins[3].direction = "INPUT";
+GPIO_CONTROL.associatedPins[3].assignedPort = "PORTA";
+GPIO_CONTROL.associatedPins[3].assignedPortSegment = "Upper";
+GPIO_CONTROL.associatedPins[3].assignedPin = "28";
+GPIO_CONTROL.associatedPins[3].pin.$assign = "PA28";
+GPIO_CONTROL.associatedPins[3].internalResistor = "PULL_UP";
 
 /* ========== 调试串口 UART0 (PA10/PA11) ========== */
 UART_DEBUG.$name = "UART_DEBUG";
