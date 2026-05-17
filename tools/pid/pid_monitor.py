@@ -153,7 +153,7 @@ def main():
     STOP.clear()
     signal.signal(signal.SIGINT, lambda *_: STOP.set())
     try:
-        ser = serial.Serial(args.port, args.baud, timeout=0.2)
+        ser = serial.serial_for_url(args.port, args.baud, timeout=0.2)
     except Exception as e:
         print(f"[serial] open failed: {e}", file=sys.stderr)
         return 1

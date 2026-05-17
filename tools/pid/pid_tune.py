@@ -114,7 +114,7 @@ def main():
     ap.add_argument("--baud", type=int, default=115200)
     args = ap.parse_args()
 
-    ser = serial.Serial(args.port, args.baud, timeout=0.2)
+    ser = serial.serial_for_url(args.port, args.baud, timeout=0.2)
     print(f"[tune] 连接 {args.port} @ {args.baud}。输入 help 查看命令。")
 
     stop_evt = threading.Event()

@@ -31,25 +31,36 @@
 #define OPEN_LOOP_CM_PER_PWM_MS     0.00022f
 
 #define SPEED_OUT_LIMIT             1000.0f
-#define SPEED_MIN_PULSE             120.0f
-#define SPEED_MAX_PULSE             420.0f
-#define ARC_CRUISE_PULSE            230.0f
-#define SEEK_LINE_PULSE             160.0f
-#define LINE_SEEK_DIFF              180.0f
+/* Encoder targets are pulses per 1 ms control tick.
+ * With 20 pulse/cm, 0.50 pulse/ms is about 25 cm/s.
+ */
+#define SPEED_MIN_PULSE             0.18f
+#define SPEED_MAX_PULSE             0.65f
+#define ARC_CRUISE_PULSE            0.42f
+#define SEEK_LINE_PULSE             0.24f
+#define LINE_SEEK_DIFF              0.18f
 
-#define POSE_BLEND_CM               22.0f
-#define POSE_POS_TOL_CM             5.0f
-#define POSE_HEADING_TOL_RAD        0.22f
-#define POSE_KP_DIST                3.4f
-#define POSE_KP_HEAD                175.0f
-#define POSE_KP_FINAL               85.0f
+#define POSE_BLEND_CM               20.0f
+#define POSE_POS_TOL_CM             4.0f
+#define POSE_HEADING_TOL_RAD        0.18f
+#define POSE_KP_DIST                0.018f
+#define POSE_KP_HEAD                0.42f
+#define POSE_KP_FINAL               0.22f
 
 #define ARC_RADIUS_CM               40.0f
 #define ARC_LEN_CM                  125.7f
 #define ARC_DONE_MIN_CM             95.0f
 #define ARC_DONE_TOL_CM             10.0f
 #define TRACK_WIDTH_CM              100.0f
-#define TRACK_HEIGHT_CM             120.0f
+#define TRACK_HEIGHT_CM             (2.0f * ARC_RADIUS_CM)
+#define ARC_IMU_HOLD_KP             0.20f
+
+#define SPEED_PID_KP                580.0f
+#define SPEED_PID_KI                8.0f
+#define SPEED_PID_KD                35.0f
+#define LINE_PID_KP                 82.0f
+#define LINE_PID_KI                 0.0f
+#define LINE_PID_KD                 18.0f
 
 typedef struct {
     float x;
@@ -82,6 +93,18 @@ typedef struct {
 static AppState_t    s_state = STATE_IDLE;
 static AppMission_t  s_mission = APP_DEFAULT_MISSION;
 
+static float         cfg_speed_min_pulse = SPEED_MIN_PULSE;
+static float         cfg_speed_max_pulse = SPEED_MAX_PULSE;
+static float         cfg_arc_cruise_pulse = ARC_CRUISE_PULSE;
+static float         cfg_seek_line_pulse = SEEK_LINE_PULSE;
+static float         cfg_line_seek_diff = LINE_SEEK_DIFF;
+static float         cfg_pose_kp_dist = POSE_KP_DIST;
+static float         cfg_pose_kp_head = POSE_KP_HEAD;
+static float         cfg_pose_kp_final = POSE_KP_FINAL;
+static float         cfg_arc_done_min_cm = ARC_DONE_MIN_CM;
+static float         cfg_arc_done_tol_cm = ARC_DONE_TOL_CM;
+static float         cfg_arc_imu_hold_kp = ARC_IMU_HOLD_KP;
+
 static PID_t         pid_spd_L, pid_spd_R;
 static PID_t         pid_line;
 
@@ -90,6 +113,10 @@ static volatile uint8_t flag_5ms = 0;
 static volatile uint8_t flag_50ms = 0;
 
 static Pose2D_t      s_pose;
+static float         s_pitch = 0.0f;
+static float         s_roll = 0.0f;
+static float         s_yaw_deg = 0.0f;
+static float         s_arc_hold_yaw_deg = 0.0f;
 static float         s_target_speed_L = 0.0f;
 static float         s_target_speed_R = 0.0f;
 static float         s_meas_speed_L   = 0.0f;   /* telemetry: 实测脉冲/控制周期 */
@@ -217,6 +244,7 @@ static void begin_segment(void)
     s_segment_started = 1u;
     s_seg_dist_cm = 0.0f;
     s_line_lost_cnt = 0u;
+    s_arc_hold_yaw_deg = s_yaw_deg;
     PID_Reset(&pid_line);
 }
 
@@ -265,9 +293,9 @@ static void next_segment(void)
 
 static float pose_speed_cmd(float dist_cm, float heading_err, float final_err)
 {
-    float speed = POSE_KP_DIST * dist_cm + SPEED_MIN_PULSE;
-    if (dist_cm > 70.0f) speed = SPEED_MAX_PULSE;
-    speed = clampf(speed, SPEED_MIN_PULSE, SPEED_MAX_PULSE);
+    float speed = cfg_pose_kp_dist * dist_cm + cfg_speed_min_pulse;
+    if (dist_cm > 70.0f) speed = cfg_speed_max_pulse;
+    speed = clampf(speed, cfg_speed_min_pulse, cfg_speed_max_pulse);
 
     if (fabsf(heading_err) > 0.75f) speed *= 0.55f;
     if (fabsf(final_err) > 0.50f && dist_cm < POSE_BLEND_CM) speed *= 0.75f;
@@ -284,7 +312,7 @@ static void control_goto_pose(const RouteSegment_t *seg)
     float blend = clampf((POSE_BLEND_CM - dist) / POSE_BLEND_CM, 0.0f, 1.0f);
     float ref_heading = wrap_pi(path_heading + blend * wrap_pi(seg->theta - path_heading));
     float heading_err = wrap_pi(ref_heading - s_pose.theta);
-    float turn = POSE_KP_HEAD * heading_err + POSE_KP_FINAL * blend * final_err;
+    float turn = cfg_pose_kp_head * heading_err + cfg_pose_kp_final * blend * final_err;
     float speed = pose_speed_cmd(dist, heading_err, final_err);
 
     s_target_speed_L = clampf(speed - turn, -SPEED_OUT_LIMIT, SPEED_OUT_LIMIT);
@@ -298,30 +326,34 @@ static void control_goto_pose(const RouteSegment_t *seg)
 static void control_arc_track(const RouteSegment_t *seg)
 {
     float diff = App_Tracking_LineControl();
-    float base = ARC_CRUISE_PULSE;
+    float base = cfg_arc_cruise_pulse;
 
     if (!App_Tracking_IsOnLine()) {
         float sign = (seg->arc_mode == ARC_RIGHT_DOWN || seg->arc_mode == ARC_LEFT_UP) ? -1.0f : 1.0f;
+        float yaw_err = s_arc_hold_yaw_deg - s_yaw_deg;
+        while (yaw_err > 180.0f) yaw_err -= 360.0f;
+        while (yaw_err < -180.0f) yaw_err += 360.0f;
         if (App_Tracking_GetLastBias() > 0.05f) sign = 1.0f;
         if (App_Tracking_GetLastBias() < -0.05f) sign = -1.0f;
-        diff = sign * LINE_SEEK_DIFF;
-        base = SEEK_LINE_PULSE;
+        diff = sign * cfg_line_seek_diff + cfg_arc_imu_hold_kp * (yaw_err / 57.2957795f);
+        base = cfg_seek_line_pulse;
         s_line_lost_cnt++;
     } else {
+        s_arc_hold_yaw_deg = s_yaw_deg;
         s_line_lost_cnt = 0u;
     }
 
     s_target_speed_L = clampf(base - diff, -SPEED_OUT_LIMIT, SPEED_OUT_LIMIT);
     s_target_speed_R = clampf(base + diff, -SPEED_OUT_LIMIT, SPEED_OUT_LIMIT);
 
-    if (s_seg_dist_cm >= (seg->length_cm - ARC_DONE_TOL_CM)) {
-        if (!App_Tracking_IsOnLine() || s_seg_dist_cm >= (seg->length_cm + ARC_DONE_TOL_CM)) {
+    if (s_seg_dist_cm >= (seg->length_cm - cfg_arc_done_tol_cm)) {
+        if (!App_Tracking_IsOnLine() || s_seg_dist_cm >= (seg->length_cm + cfg_arc_done_tol_cm)) {
             next_segment();
             return;
         }
     }
 
-    if (s_seg_dist_cm >= ARC_DONE_MIN_CM && s_line_lost_cnt >= 3u) {
+    if (s_seg_dist_cm >= cfg_arc_done_min_cm && s_line_lost_cnt >= 3u) {
         next_segment();
     }
 }
@@ -415,6 +447,7 @@ static void poll_fast_inputs(void)
 #ifndef NUEDC_NO_ENCODER
     BSP_Encoder_Poll();
 #endif
+    BSP_IMU_Update(&s_pitch, &s_roll, &s_yaw_deg);
 }
 
 static void update_ui(void)
@@ -432,6 +465,13 @@ static void update_ui(void)
     BSP_OLED_ShowNum(0, 4, (int32_t)trk->contrast, 4);
     BSP_OLED_ShowNum(40, 4, (int32_t)(trk->bias * 100.0f), 4);
     BSP_OLED_ShowNum(80, 4, (int32_t)(s_mission_time_ms / 1000u), 4);
+    BSP_OLED_ShowNum(0, 6, (int32_t)trk->raw[0], 1);
+    BSP_OLED_ShowNum(16, 6, (int32_t)trk->raw[1], 1);
+    BSP_OLED_ShowNum(32, 6, (int32_t)trk->raw[2], 1);
+    BSP_OLED_ShowNum(48, 6, (int32_t)trk->raw[3], 1);
+    BSP_OLED_ShowNum(64, 6, (int32_t)trk->raw[4], 1);
+    BSP_OLED_ShowNum(80, 6, (int32_t)trk->raw[5], 1);
+    BSP_OLED_ShowNum(96, 6, (int32_t)trk->raw[6], 1);
     BSP_OLED_Refresh();
 }
 
@@ -475,9 +515,9 @@ void App_Init(void)
     BSP_K230_Init();
 #endif
 
-    PID_Init(&pid_spd_L, 1.9f, 0.08f, 0.10f, -1000.0f, 1000.0f);
-    PID_Init(&pid_spd_R, 1.9f, 0.08f, 0.10f, -1000.0f, 1000.0f);
-    PID_Init(&pid_line, 120.0f, 0.0f, 24.0f, -260.0f, 260.0f);
+    PID_Init(&pid_spd_L, SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, -1000.0f, 1000.0f);
+    PID_Init(&pid_spd_R, SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, -1000.0f, 1000.0f);
+    PID_Init(&pid_line, LINE_PID_KP, LINE_PID_KI, LINE_PID_KD, -0.36f, 0.36f);
 
     App_Tracking_Init(&pid_line);
     Proto_Init();
@@ -486,6 +526,21 @@ void App_Init(void)
     Telem_Bind(TELEM_CH_L,    &pid_spd_L, &s_target_speed_L, &s_meas_speed_L);
     Telem_Bind(TELEM_CH_R,    &pid_spd_R, &s_target_speed_R, &s_meas_speed_R);
     Telem_Bind(TELEM_CH_LINE, &pid_line,  &s_line_setpoint,  &s_line_bias);
+    Telem_BindAppState((const uint8_t *)&s_mission, (const uint8_t *)&s_state,
+                       &s_loop_index, &s_seg_index,
+                       &s_pose.x, &s_pose.y, &s_pose.theta,
+                       &s_seg_dist_cm, &s_mission_time_ms);
+    Telem_RegisterParam("spd_min", &cfg_speed_min_pulse, 0.0f, 1.5f);
+    Telem_RegisterParam("spd_max", &cfg_speed_max_pulse, 0.0f, 2.0f);
+    Telem_RegisterParam("arc_spd", &cfg_arc_cruise_pulse, 0.0f, 1.5f);
+    Telem_RegisterParam("seek_spd", &cfg_seek_line_pulse, 0.0f, 1.0f);
+    Telem_RegisterParam("seek_diff", &cfg_line_seek_diff, 0.0f, 0.8f);
+    Telem_RegisterParam("pose_kd", &cfg_pose_kp_dist, 0.0f, 0.08f);
+    Telem_RegisterParam("pose_kh", &cfg_pose_kp_head, 0.0f, 1.2f);
+    Telem_RegisterParam("pose_kf", &cfg_pose_kp_final, 0.0f, 0.8f);
+    Telem_RegisterParam("arc_min", &cfg_arc_done_min_cm, 0.0f, 160.0f);
+    Telem_RegisterParam("arc_tol", &cfg_arc_done_tol_cm, 0.0f, 40.0f);
+    Telem_RegisterParam("imu_hold", &cfg_arc_imu_hold_kp, 0.0f, 1.0f);
     {
         const TrackInfo_t *track = App_Tracking_GetInfo();
         Telem_BindLineSensors(track->raw, BSP_ADC_CCD_COUNT,

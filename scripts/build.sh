@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/env.sh"
 
 configure_only=0
+export TMPDIR="${TMPDIR:-$BUILD_DIR/tmp}"
+mkdir -p "$TMPDIR"
 
 if [[ "${1:-}" == "--configure-only" ]]; then
   configure_only=1

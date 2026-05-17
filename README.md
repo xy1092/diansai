@@ -1,11 +1,25 @@
 # nuedc_car — MSPM0G3507 自动行驶小车
 
-基于立创地猛星 `MSPM0G3507 48Pin` 的电赛小车工程，当前代码已经补到赛题任务层，包含：
+基于 `LP-MSPM0G3507` 的电赛小车工程，当前代码已经补到赛题任务层，包含：
 
 - 任务 `H1/H2/H3/H4` 路径状态机
 - 直线段点到点控制
 - 半圆弧 7 路灰度循迹
 - 经过 `A/B/C/D` 与停车提示
+
+## 最终引脚图
+
+打板前请直接看这份独立文档：
+
+- [MSPM0G3507_PINOUT.md](/home/xy/ti-workspace/projects/nuedc_car/MSPM0G3507_PINOUT.md)
+
+里面包含：
+
+- 带编码器电机 6P 接口
+- TB6612 电机驱动接线
+- 7 路数字灰度接线
+- I2C、串口、蜂鸣器、LED、按键、超声波预留
+- MSPM0G3507 数据手册第 6.2 节表 6-1 的已用引脚功能核对
 
 ## 当前环境结论
 
@@ -98,10 +112,10 @@
   MSPM0 + J-Link 官方说明：
   https://software-dl.ti.com/msp430/esd/MSPM0-SDK/2_10_00_04/docs/english/tools/doc_guide/doc_guide-srcs/segger_jlink.html
 
-#### 3. 关于 ST-LINK
+#### 3. 只有走 ST-LINK 时才可能需要
 
 - 带 `MSPM0` flash driver 的 `OpenOCD`
-  注意：地猛星官方资料明确提示不要用 `ST-LINK` 下载，可能锁芯片。本机虽然已经有 `/usr/bin/openocd`，但它当前也不支持 `MSPM0` 烧录；地猛星优先走板载串口下载或官方推荐的 DAP-LINK/调试器。
+  注意：本机虽然已经有 `/usr/bin/openocd`，但它当前不支持 `MSPM0` 烧录，所以如果坚持走 `ST-LINK`，还需要你另外安装一个支持 `mspm0` 的版本。
   OpenOCD 官方获取说明：
   https://openocd.org/pages/getting-openocd.html
 
@@ -118,7 +132,7 @@
 
 这一步不需要下载新软件，直接用你本机已经有的 CCS 脚本：
 
-```bash
+`bash
 /home/xy/ti/ccs2050/ccs/install_scripts/ti_permissions_install.sh --install
 sudo udevadm control --reload-rules
 sudo udevadm trigger
@@ -228,9 +242,9 @@ FLASH_RUNNER=jlink ./scripts/flash.sh
 - `JLinkExe`
 - `JLinkGDBServerCLExe`
 
-### 1.2 关于 ST-LINK
+### 1.2 如果要用 ST-LINK，再额外安装什么
 
-地猛星官方资料明确提示不要用 `ST-LINK` 下载，可能锁芯片。本机虽然已经有 `/usr/bin/openocd`，但 `./scripts/check_env.sh` 已验证当前二进制不包含 `mspm0` flash driver，因此现在也**不能**直接拿它给 `MSPM0G3507` 烧录。
+本机虽然已经有 `/usr/bin/openocd`，但 `./scripts/check_env.sh` 已验证当前二进制不包含 `mspm0` flash driver，因此现在**不能**直接拿它给 `MSPM0G3507` 烧录。
 
 也就是说，`ST-LINK` 这条路你还需要补下面二选一：
 
@@ -248,69 +262,22 @@ OpenOCD 官方页面：
 - `ti_msp_dl_config.c`
 - `ti_msp_dl_config.h`
 
-当前 `.syscfg` 已按地猛星 `MSPM0G3507 / LQFP-48(PT)` 配置了板载资源和小车外设：
+因此还不能真正编译。你需要在 CCS 中为 `LP-MSPM0G3507` 新建或导入一个 `.syscfg`，至少补齐：
 
-- 板载 LED：`PA14`
-- 板载按键：`PA18`
-- 板载 CH340 调试串口：`UART0 PA10/PA11`
-
-- 电机 PWM：`TIMA0`，`PA8/PA9`
-- 电机方向：`PB2/PB3/PB8/PB9`，`STBY=PB6`
-- 7 路数字灰度：`PA27/PA26/PA25/PA24/PA7/PB18/PB19`
-- 编码器：左轮 `PA0/PA1`，右轮 `PB20/PB24`
-- I2C：`I2C1 PA16/PA17`
-- 蜂鸣器：`PB7`
-
-扩展接口已预留但默认不参与正式控制：
-
-- 超声波模块：
-  - `PA12` = `ULTRASONIC_TRIG`
-  - `PA13` = `ULTRASONIC_ECHO`
-  - 接口建议：`VCC / GND / TRIG / ECHO`
-  - 如果使用 `HC-SR04` 这类 5V ECHO 模块，`ECHO` 必须先分压或电平转换到 3.3V 再进 `PA13`
-- 庐山派 K230：
-  - `PA21` = `UART2_TX`，接 K230 `RX`
-  - `PA22` = `UART2_RX`，接 K230 `TX`
-  - `PA15` = `K230_RESET`，默认高电平释放复位，低电平保持复位
-  - `PA23` = `K230_READY`，K230 输出状态给 MSPM0
-  - 接口建议：`5V / GND / TX / RX / RESET / READY`
-  - K230 单独供电，和 MSPM0 共地；MSPM0 只收识别结果、偏差、状态等小数据包，不接视频流
-
-扩展 BSP 默认关闭，可按需打开：
-
-```bash
-NUEDC_USE_ULTRASONIC=ON ./scripts/build.sh
-NUEDC_USE_K230=ON ./scripts/build.sh
-```
-
-当前默认按编码器闭环构建，`NUEDC_NO_ENCODER=OFF`，编码器 GPIO 已按 `PA0/PA1`、`PB20/PB24` 配好。只做电机开环调试时，可临时设置 `NUEDC_NO_ENCODER=ON`。
+- `TIMA1` PWM x2
+- `TIMG6/TIMG7` QEI
+- `ADC0` 4 路灰度 + 电池采样
+- `UART0/UART1`
+- `I2C1`
+- 电机方向 GPIO
+- 蜂鸣器 / LED 提示 GPIO
 
 目前这套 `CMake` 方案默认直接消费工程根目录下已有的：
 
 - `ti_msp_dl_config.c`
 - `ti_msp_dl_config.h`
 
-如果修改了 `nuedc_car.syscfg`，先重新生成这两个文件，再回到 `CMake` 路线。
-
-为了少走一步“从空白工程开始搭外设”，仓库里已经放了一个起始文件：
-
-- [nuedc_car.syscfg](/home/xy/ti-workspace/projects/nuedc_car/nuedc_car.syscfg)
-
-你可以直接在 `CCS / SysConfig` 打开它，当前使用的实例名是：
-
-- `PWM_MOTOR`
-- `GPIO_MOTOR_DIR`
-- `I2C_INST`
-- `UART_DEBUG`
-- `UART_K230`
-- `GPIO_LINE_A`
-- `GPIO_LINE_B`
-- `GPIO_ENCODER_A`
-- `GPIO_ENCODER_B`
-- `GPIO_RESERVED_A`
-- `GPIO_RESERVED_B`
-
-赛题禁止摄像头，正式方案不再使用 `UART_OPENMV` / OpenMV；`UART_K230` 仅作为可拆卸扩展通信口预留，默认不启用。
+也就是说，建议先在 `CCS/SysConfig` 里把这两个文件生成出来，再回到 `CMake` 路线。
 
 ### 3. 安装 Linux udev 规则
 
@@ -344,7 +311,6 @@ sudo udevadm trigger
 - [CMakePresets.json](/home/xy/ti-workspace/projects/nuedc_car/CMakePresets.json)
 - [cmake/toolchains/arm-none-eabi-gcc.cmake](/home/xy/ti-workspace/projects/nuedc_car/cmake/toolchains/arm-none-eabi-gcc.cmake)
 - [tools/openocd/mspm0g3507.cfg](/home/xy/ti-workspace/projects/nuedc_car/tools/openocd/mspm0g3507.cfg)
-- [nuedc_car.syscfg](/home/xy/ti-workspace/projects/nuedc_car/nuedc_car.syscfg)
 
 默认构建器是：
 

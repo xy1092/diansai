@@ -21,12 +21,9 @@ static uint8_t       s_stop_flag    = 0;
 
 extern volatile uint32_t g_tick_ms;
 
-static void on_rx_byte(uint8_t b);
-
 void Proto_Init(void)
 {
     s_state = PS_SYNC1;
-    BSP_Uart_SetRxCallback(0, on_rx_byte);
 }
 
 void Proto_Poll(void)
@@ -115,7 +112,7 @@ static void dispatch_frame(void)
     }
 }
 
-static void on_rx_byte(uint8_t b)
+void Proto_OnRxByte(uint8_t b)
 {
     if (b >= '1' && b <= '4') {
         s_mission_req = (uint8_t)(b - '0');

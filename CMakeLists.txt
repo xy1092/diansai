@@ -6,7 +6,7 @@ set(CMAKE_EXECUTABLE_SUFFIX ".out")
 option(NUEDC_MINIMAL_DEBUG "Build with BSP/protocol stubs to enable breakpoint debugging before full pinmux is ready" OFF)
 option(NUEDC_NO_ENCODER "Build for open-loop motor control without wheel encoders" OFF)
 option(NUEDC_USE_ULTRASONIC "Enable reserved ultrasonic interface BSP on PA12/PA13" OFF)
-option(NUEDC_USE_K230 "Enable reserved K230 UART2 interface BSP on PA21/PA22" OFF)
+option(NUEDC_USE_K230 "Enable K230 BSP only when SysConfig defines UART_K230 pins" OFF)
 
 if(DEFINED ENV{MSPM0_SDK_ROOT} AND NOT "$ENV{MSPM0_SDK_ROOT}" STREQUAL "")
   set(MSPM0_SDK_ROOT "$ENV{MSPM0_SDK_ROOT}" CACHE PATH "Path to the MSPM0 SDK root")
@@ -119,6 +119,7 @@ set(NUEDC_APP_SOURCES
   app/app_tracking.c
   middleware/filter.c
   middleware/pid.c
+  middleware/rtt_log.c
   middleware/telemetry.c
 )
 
@@ -177,13 +178,16 @@ target_compile_options(nuedc_car PRIVATE
   -Wextra
   -Wno-unused-parameter
   -Og
-  -g3
+  -g2
+  -gdwarf-4
 )
 
 target_link_options(nuedc_car PRIVATE
   -mcpu=cortex-m0plus
   -mthumb
+  -nostartfiles
   -T${MSPM0_LINKER_SCRIPT}
+  -Wl,-e,Reset_Handler
   -Wl,--gc-sections
   -Wl,-Map=${CMAKE_BINARY_DIR}/nuedc_car.map
   --specs=nano.specs

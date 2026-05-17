@@ -124,3 +124,35 @@ socat -d -d pty,raw,echo=0,link=/tmp/ttyV0 pty,raw,echo=0,link=/tmp/ttyV1 &
 - [ ] **速度环 Ki**：等稳态误差出来后加，注意积分限幅别打满
 - [ ] **循迹环 Kd**：只在有明显抖动时加，起步设 0
 - [ ] **采样率**：建议内环 1 kHz，外环 200 Hz；遥测默认 100 Hz 够用
+
+## 现场无电脑跑车 + 回来导出日志
+
+固件现在带 RAM 黑匣子，默认每 100 ms 记录一帧关键数据：任务、状态、圈数、段号、位姿、左右轮目标/实测/输出、循迹偏差、灰度强度。断电会丢，但只要跑完不断电，回来插串口就能导出。
+
+推荐流程：
+
+1. 插线打开 Dashboard，点 `Clear Log`，确认黑匣子清空。
+2. 点 `Enable Log`，然后可以断开串口，把车放到场地跑。
+3. 跑完不要断电，重新插线连接 Dashboard。
+4. 点 `Dump Log`，会生成 `*_blackbox.csv`。
+5. 点 `Save AI Pack`，会生成 `*_ai_pack.json`，把这个 JSON 和 CSV 给 AI 分析最方便。
+
+常用命令也可以手动发：
+
+```text
+$LOG,1      开启黑匣子
+$LOGCLR     清空黑匣子
+$LOGDUMP    导出黑匣子
+```
+
+实时串口遥测默认关闭，Dashboard 连接后会自动发送 `$RESUME`。这样现场不连电脑时，小车不会一直往串口刷日志。
+
+## 预留无线 J-Link / RTT
+
+`bsp_uart.c` 会把同一份遥测同时写入 SEGGER RTT 上行缓冲。以后有无线 J-Link 后，可以继续用：
+
+```bash
+python3 tools/pid/capture_rtt.py --duration 30
+```
+
+RTT 采集适合无线实时记录；串口黑匣子适合现在这种“先跑，回来插线导出”的方式。

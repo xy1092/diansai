@@ -15,6 +15,7 @@ typedef struct {
 
 void           Proto_Init(void);
 void           Proto_Poll(void);          /* 从 app 主循环调用，轮询板载按键 */
+void           Proto_OnRxByte(uint8_t b); /* 调试串口控制字节：1~4/s/x 或二进制帧 */
 
 uint8_t        Proto_HasFreshVisionFrame(void);
 ProtoVision_t  Proto_GetVision(void);

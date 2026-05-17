@@ -1,11 +1,15 @@
 #include "telemetry.h"
 #include "../bsp/bsp_uart.h"
+#include "protocol.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
 #define CMD_BUF_LEN   64
 #define DEFAULT_HZ    100u
+#define MAX_PARAMS    16u
+#define BLACKBOX_CAPACITY 512u
+#define BLACKBOX_PERIOD_MS 100u
 
 typedef struct {
     PID_t       *pid;
@@ -24,18 +28,70 @@ typedef struct {
     uint8_t         valid;
 } TelemLineBind_t;
 
+typedef struct {
+    const uint8_t  *mission;
+    const uint8_t  *state;
+    const uint8_t  *loop;
+    const uint8_t  *seg;
+    const float    *x;
+    const float    *y;
+    const float    *theta;
+    const float    *seg_dist;
+    const uint32_t *mission_time;
+    uint8_t         valid;
+} TelemAppBind_t;
+
+typedef struct {
+    const char *name;
+    float      *value;
+    float       min_v;
+    float       max_v;
+    uint8_t     valid;
+} TelemParam_t;
+
+typedef struct __attribute__((packed)) {
+    uint16_t mission_time_10ms;
+    uint8_t  mission;
+    uint8_t  state;
+    uint8_t  loop;
+    uint8_t  seg;
+    int16_t  x_10;
+    int16_t  y_10;
+    int16_t  theta_deg_10;
+    int16_t  seg_dist_10;
+    int16_t  sp_l_1000;
+    int16_t  meas_l_1000;
+    int16_t  out_l;
+    int16_t  sp_r_1000;
+    int16_t  meas_r_1000;
+    int16_t  out_r;
+    int16_t  line_bias_1000;
+    uint16_t contrast;
+    uint16_t strength;
+    uint8_t  on_line;
+} BlackboxSample_t;
+
 static TelemBind_t s_binds[TELEM_CH_MAX];
 static const char *s_ch_name[TELEM_CH_MAX] = { "L", "R", "LINE", "ANG" };
 static TelemLineBind_t s_line_bind;
+static TelemAppBind_t s_app_bind;
+static TelemParam_t s_params[MAX_PARAMS];
+static BlackboxSample_t s_blackbox[BLACKBOX_CAPACITY];
 
 static uint16_t s_period_ms = 10u;      /* 100 Hz */
-static uint8_t  s_enabled   = 1u;
+static uint8_t  s_enabled   = 0u;
 static uint8_t  s_raw_line_enabled = 0u;
 static uint32_t s_last_emit_ms = 0u;
 static uint8_t  s_emit_primed = 0u;
+static uint16_t s_blackbox_wr = 0u;
+static uint16_t s_blackbox_count = 0u;
+static uint32_t s_blackbox_last_ms = 0u;
+static uint8_t  s_blackbox_enabled = 1u;
+static uint8_t  s_blackbox_primed = 0u;
 
 static char     s_cmd_buf[CMD_BUF_LEN];
 static uint8_t  s_cmd_idx   = 0u;
+static uint8_t  s_in_telem_cmd = 0u;
 
 /* ---------- 对外 API ---------- */
 
@@ -63,7 +119,7 @@ void Telem_BindLineSensors(const uint16_t *raw, uint8_t raw_count,
 
 void Telem_Init(void)
 {
-    BSP_Uart_SetRxCallback(0, Telem_OnRxByte);   /* 0 = 调试 UART */
+    BSP_Uart_SetRxCallback(0, Telem_RxDispatchByte);   /* 0 = 调试 UART */
 }
 
 void Telem_SetRawLineEnabled(uint8_t on)
@@ -71,8 +127,146 @@ void Telem_SetRawLineEnabled(uint8_t on)
     s_raw_line_enabled = on ? 1u : 0u;
 }
 
+void Telem_BindAppState(const uint8_t *mission, const uint8_t *state,
+                        const uint8_t *loop, const uint8_t *seg,
+                        const float *x, const float *y, const float *theta,
+                        const float *seg_dist, const uint32_t *mission_time)
+{
+    s_app_bind.mission = mission;
+    s_app_bind.state = state;
+    s_app_bind.loop = loop;
+    s_app_bind.seg = seg;
+    s_app_bind.x = x;
+    s_app_bind.y = y;
+    s_app_bind.theta = theta;
+    s_app_bind.seg_dist = seg_dist;
+    s_app_bind.mission_time = mission_time;
+    s_app_bind.valid = (mission && state && loop && seg && x && y && theta &&
+                        seg_dist && mission_time) ? 1u : 0u;
+}
+
+void Telem_RegisterParam(const char *name, float *value, float min_v, float max_v)
+{
+    if (!name || !value) return;
+    for (uint8_t i = 0; i < MAX_PARAMS; ++i) {
+        if (!s_params[i].valid) {
+            s_params[i].name = name;
+            s_params[i].value = value;
+            s_params[i].min_v = min_v;
+            s_params[i].max_v = max_v;
+            s_params[i].valid = 1u;
+            return;
+        }
+    }
+}
+
+static int16_t clamp_i16(float v)
+{
+    if (v > 32767.0f) return 32767;
+    if (v < -32768.0f) return -32768;
+    return (int16_t)v;
+}
+
+static uint16_t clamp_u16_from_u32(uint32_t v)
+{
+    if (v > 65535u) return 65535u;
+    return (uint16_t)v;
+}
+
+static void blackbox_clear(void)
+{
+    s_blackbox_wr = 0u;
+    s_blackbox_count = 0u;
+    s_blackbox_primed = 0u;
+}
+
+static void blackbox_capture(uint32_t ts_ms)
+{
+    if (!s_blackbox_enabled || !s_app_bind.valid) return;
+    if (!s_blackbox_primed) {
+        s_blackbox_primed = 1u;
+        s_blackbox_last_ms = ts_ms;
+    } else if ((uint32_t)(ts_ms - s_blackbox_last_ms) < BLACKBOX_PERIOD_MS) {
+        return;
+    } else {
+        s_blackbox_last_ms = ts_ms;
+    }
+
+    BlackboxSample_t *s = &s_blackbox[s_blackbox_wr];
+    PID_t *pid_l = s_binds[TELEM_CH_L].valid ? s_binds[TELEM_CH_L].pid : 0;
+    PID_t *pid_r = s_binds[TELEM_CH_R].valid ? s_binds[TELEM_CH_R].pid : 0;
+
+    s->mission_time_10ms = clamp_u16_from_u32(*s_app_bind.mission_time / 10u);
+    s->mission = *s_app_bind.mission;
+    s->state = *s_app_bind.state;
+    s->loop = *s_app_bind.loop;
+    s->seg = *s_app_bind.seg;
+    s->x_10 = clamp_i16(*s_app_bind.x * 10.0f);
+    s->y_10 = clamp_i16(*s_app_bind.y * 10.0f);
+    s->theta_deg_10 = clamp_i16(*s_app_bind.theta * 572.957795f);
+    s->seg_dist_10 = clamp_i16(*s_app_bind.seg_dist * 10.0f);
+    s->sp_l_1000 = pid_l ? clamp_i16(pid_l->last_setpoint * 1000.0f) : 0;
+    s->meas_l_1000 = pid_l ? clamp_i16(pid_l->last_measure * 1000.0f) : 0;
+    s->out_l = pid_l ? clamp_i16(pid_l->last_output) : 0;
+    s->sp_r_1000 = pid_r ? clamp_i16(pid_r->last_setpoint * 1000.0f) : 0;
+    s->meas_r_1000 = pid_r ? clamp_i16(pid_r->last_measure * 1000.0f) : 0;
+    s->out_r = pid_r ? clamp_i16(pid_r->last_output) : 0;
+    s->line_bias_1000 = (s_line_bind.valid && s_line_bind.bias) ?
+                        clamp_i16(*s_line_bind.bias * 1000.0f) : 0;
+    s->contrast = (s_line_bind.valid && s_line_bind.contrast) ? *s_line_bind.contrast : 0u;
+    s->strength = (s_line_bind.valid && s_line_bind.strength) ? *s_line_bind.strength : 0u;
+    s->on_line = (s_line_bind.valid && s_line_bind.on_line) ? *s_line_bind.on_line : 0u;
+
+    s_blackbox_wr++;
+    if (s_blackbox_wr >= BLACKBOX_CAPACITY) s_blackbox_wr = 0u;
+    if (s_blackbox_count < BLACKBOX_CAPACITY) s_blackbox_count++;
+}
+
+static void blackbox_dump(void)
+{
+    uint16_t start = (s_blackbox_count == BLACKBOX_CAPACITY) ? s_blackbox_wr : 0u;
+
+    BSP_Uart_Printf("$BHEAD,%u,%u,%u,%u\r\n",
+                    (unsigned)s_blackbox_count,
+                    (unsigned)BLACKBOX_CAPACITY,
+                    (unsigned)BLACKBOX_PERIOD_MS,
+                    (unsigned)s_blackbox_enabled);
+
+    for (uint16_t i = 0u; i < s_blackbox_count; ++i) {
+        uint16_t idx = (uint16_t)(start + i);
+        if (idx >= BLACKBOX_CAPACITY) idx -= BLACKBOX_CAPACITY;
+        const BlackboxSample_t *s = &s_blackbox[idx];
+
+        BSP_Uart_Printf("$B,%u,%u,%u,%u,%u,%u,%.1f,%.1f,%.1f,%.1f,%.3f,%.3f,%d,%.3f,%.3f,%d,%.3f,%u,%u,%u\r\n",
+                        (unsigned)i,
+                        (unsigned)s->mission_time_10ms * 10u,
+                        (unsigned)s->mission,
+                        (unsigned)s->state,
+                        (unsigned)s->loop,
+                        (unsigned)s->seg,
+                        (float)s->x_10 / 10.0f,
+                        (float)s->y_10 / 10.0f,
+                        (float)s->theta_deg_10 / 10.0f,
+                        (float)s->seg_dist_10 / 10.0f,
+                        (float)s->sp_l_1000 / 1000.0f,
+                        (float)s->meas_l_1000 / 1000.0f,
+                        (int)s->out_l,
+                        (float)s->sp_r_1000 / 1000.0f,
+                        (float)s->meas_r_1000 / 1000.0f,
+                        (int)s->out_r,
+                        (float)s->line_bias_1000 / 1000.0f,
+                        (unsigned)s->contrast,
+                        (unsigned)s->strength,
+                        (unsigned)s->on_line);
+    }
+
+    BSP_Uart_Printf("$BEND,%u\r\n", (unsigned)s_blackbox_count);
+}
+
 void Telem_Tick(uint32_t ts_ms)
 {
+    blackbox_capture(ts_ms);
+
     if (!s_enabled) return;
     if (!s_emit_primed) {
         s_emit_primed = 1u;
@@ -108,6 +302,20 @@ void Telem_Tick(uint32_t ts_ms)
                         (unsigned)s_line_bind.raw[4],
                         (unsigned)s_line_bind.raw[5],
                         (unsigned)s_line_bind.raw[6]);
+    }
+
+    if (s_app_bind.valid) {
+        BSP_Uart_Printf("$A,%lu,%u,%u,%u,%u,%.2f,%.2f,%.2f,%.2f,%lu\r\n",
+                        (unsigned long)ts_ms,
+                        (unsigned)*s_app_bind.mission,
+                        (unsigned)*s_app_bind.state,
+                        (unsigned)*s_app_bind.loop,
+                        (unsigned)*s_app_bind.seg,
+                        *s_app_bind.x,
+                        *s_app_bind.y,
+                        *s_app_bind.theta * 57.2957795f,
+                        *s_app_bind.seg_dist,
+                        (unsigned long)*s_app_bind.mission_time);
     }
 }
 
@@ -145,6 +353,28 @@ static void dump_gains(void)
                         s_ch_name[i], p->kp, p->ki, p->kd);
     }
     BSP_Uart_Printf("$CFG,rawline,%u\r\n", (unsigned)s_raw_line_enabled);
+    for (uint8_t i = 0; i < MAX_PARAMS; ++i) {
+        if (!s_params[i].valid) continue;
+        BSP_Uart_Printf("$C,%s,%.3f,%.3f,%.3f\r\n",
+                        s_params[i].name, *s_params[i].value,
+                        s_params[i].min_v, s_params[i].max_v);
+    }
+}
+
+static void apply_cfg_set(const char *name, float v)
+{
+    for (uint8_t i = 0; i < MAX_PARAMS; ++i) {
+        if (!s_params[i].valid || strcmp(name, s_params[i].name) != 0) continue;
+        if (v < s_params[i].min_v || v > s_params[i].max_v) {
+            BSP_Uart_Printf("$ERR,cfgset,range,%s,%.3f,%.3f\r\n",
+                            name, s_params[i].min_v, s_params[i].max_v);
+            return;
+        }
+        *s_params[i].value = v;
+        BSP_Uart_Printf("$OK,cfgset,%s,%.3f\r\n", name, v);
+        return;
+    }
+    BSP_Uart_Printf("$ERR,cfgset,bad_name\r\n");
 }
 
 static void handle_line(char *line)
@@ -160,6 +390,12 @@ static void handle_line(char *line)
         float v;
         if (sscanf(line + 5, "%7[^,],%3[^,],%f", ch, gain, &v) == 3) {
             apply_set(ch, gain, v);
+        }
+    } else if (!strncmp(line, "$CFGSET,", 8)) {
+        char name[16];
+        float v;
+        if (sscanf(line + 8, "%15[^,],%f", name, &v) == 2) {
+            apply_cfg_set(name, v);
         }
     } else if (!strncmp(line, "$RATE,", 6)) {
         int hz = atoi(line + 6);
@@ -183,6 +419,15 @@ static void handle_line(char *line)
         s_enabled = 1; BSP_Uart_Printf("$OK,resume\r\n");
     } else if (!strcmp(line, "$DUMP")) {
         dump_gains();
+    } else if (!strcmp(line, "$LOGDUMP")) {
+        blackbox_dump();
+    } else if (!strcmp(line, "$LOGCLR")) {
+        blackbox_clear();
+        BSP_Uart_Printf("$OK,logclr\r\n");
+    } else if (!strncmp(line, "$LOG,", 5)) {
+        int on = atoi(line + 5);
+        s_blackbox_enabled = on ? 1u : 0u;
+        BSP_Uart_Printf("$OK,log,%u\r\n", (unsigned)s_blackbox_enabled);
     } else {
         BSP_Uart_Printf("$ERR,unknown\r\n");
     }
@@ -199,4 +444,21 @@ void Telem_OnRxByte(uint8_t b)
     if (b == '\r') return;
     if (s_cmd_idx < CMD_BUF_LEN - 1) s_cmd_buf[s_cmd_idx++] = (char)b;
     else s_cmd_idx = 0;                /* 行太长丢弃 */
+}
+
+void Telem_RxDispatchByte(uint8_t b)
+{
+    if (s_in_telem_cmd) {
+        Telem_OnRxByte(b);
+        if (b == '\n') s_in_telem_cmd = 0u;
+        return;
+    }
+
+    if (b == '$') {
+        s_in_telem_cmd = 1u;
+        Telem_OnRxByte(b);
+        return;
+    }
+
+    Proto_OnRxByte(b);
 }

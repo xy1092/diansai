@@ -45,6 +45,7 @@
             -L${PROJECT_ROOT}
             -L${PROJECT_BUILD_DIR}/syscfg
             -Wl,--rom_model
+            -Wl,-e,Reset_Handler
             -Wl,--warn_sections
             -L${CG_TOOL_ROOT}/lib
             -llibc.a

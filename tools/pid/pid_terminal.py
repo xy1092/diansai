@@ -238,7 +238,7 @@ def main():
 
     STOP.clear()
     try:
-        ser = serial.Serial(args.port, args.baud, timeout=0.2)
+        ser = serial.serial_for_url(args.port, args.baud, timeout=0.2)
     except Exception as e:
         print(f"[serial] 打开失败: {e}", file=sys.stderr)
         return 1

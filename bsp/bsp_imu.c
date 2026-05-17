@@ -9,10 +9,24 @@
 #define MPU_GYRO_CONFIG     0x1B
 #define MPU_ACCEL_CONFIG    0x1C
 #define MPU_ACCEL_XOUT_H    0x3B
+#define I2C_WAIT_LIMIT      100000u
 
 static float s_pitch = 0, s_roll = 0, s_yaw = 0;
 static float s_gx = 0,    s_gy = 0,   s_gz = 0;
 static float s_ax = 0,    s_ay = 0,   s_az = 0;
+
+static int i2c_wait_idle(void)
+{
+    uint32_t timeout = I2C_WAIT_LIMIT;
+    while ((DL_I2C_getControllerStatus(I2C_INST) &
+            DL_I2C_CONTROLLER_STATUS_BUSY_BUS) != 0u) {
+        if (timeout-- == 0u) {
+            DL_I2C_resetControllerTransfer(I2C_INST);
+            return -1;
+        }
+    }
+    return 0;
+}
 
 static int i2c_write_reg(uint8_t reg, uint8_t val)
 {
@@ -20,26 +34,31 @@ static int i2c_write_reg(uint8_t reg, uint8_t val)
     DL_I2C_fillControllerTXFIFO(I2C_INST, buf, 2);
     DL_I2C_startControllerTransfer(I2C_INST, MPU6050_I2C_ADDR,
         DL_I2C_CONTROLLER_DIRECTION_TX, 2);
-    while (DL_I2C_getControllerStatus(I2C_INST) & DL_I2C_CONTROLLER_STATUS_BUSY_BUS) {}
-    return 0;
+    return i2c_wait_idle();
 }
 
 static int i2c_read_regs(uint8_t reg, uint8_t *buf, uint8_t len)
 {
+    uint32_t timeout;
     DL_I2C_fillControllerTXFIFO(I2C_INST, &reg, 1);
     DL_I2C_startControllerTransfer(I2C_INST, MPU6050_I2C_ADDR,
         DL_I2C_CONTROLLER_DIRECTION_TX, 1);
-    while (DL_I2C_getControllerStatus(I2C_INST) & DL_I2C_CONTROLLER_STATUS_BUSY_BUS) {}
+    if (i2c_wait_idle() != 0) return -1;
 
     DL_I2C_startControllerTransfer(I2C_INST, MPU6050_I2C_ADDR,
         DL_I2C_CONTROLLER_DIRECTION_RX, len);
     uint8_t i = 0;
+    timeout = I2C_WAIT_LIMIT * (uint32_t)len;
     while (i < len) {
         if (!DL_I2C_isControllerRXFIFOEmpty(I2C_INST)) {
             buf[i++] = DL_I2C_receiveControllerData(I2C_INST);
+            timeout = I2C_WAIT_LIMIT * (uint32_t)(len - i + 1u);
+        } else if (timeout-- == 0u) {
+            DL_I2C_resetControllerTransfer(I2C_INST);
+            return -1;
         }
     }
-    return 0;
+    return i2c_wait_idle();
 }
 
 void BSP_IMU_Init(void)

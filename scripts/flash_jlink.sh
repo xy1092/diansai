@@ -18,7 +18,8 @@ if [[ ! -f "$image_file" ]]; then
   exit 2
 fi
 
-cmd_file="$(mktemp)"
+mkdir -p "$BUILD_DIR/tmp"
+cmd_file="$(mktemp "$BUILD_DIR/tmp/jlink_cmd.XXXXXX")"
 trap 'rm -f "$cmd_file"' EXIT
 
 cat >"$cmd_file" <<EOF

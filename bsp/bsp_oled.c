@@ -7,7 +7,22 @@
  * 快速实现：移植一份 SSD1306 I2C 驱动，把 i2c_write_bytes 替换为本工程的 I2C API。
  */
 
+#define I2C_WAIT_LIMIT 100000u
+
 static uint8_t s_framebuf[1024];   /* 128×64 / 8 */
+
+static int i2c_wait_idle(void)
+{
+    uint32_t timeout = I2C_WAIT_LIMIT;
+    while ((DL_I2C_getControllerStatus(I2C_INST) &
+            DL_I2C_CONTROLLER_STATUS_BUSY_BUS) != 0u) {
+        if (timeout-- == 0u) {
+            DL_I2C_resetControllerTransfer(I2C_INST);
+            return -1;
+        }
+    }
+    return 0;
+}
 
 static void ssd1306_cmd(uint8_t cmd)
 {
@@ -15,7 +30,7 @@ static void ssd1306_cmd(uint8_t cmd)
     DL_I2C_fillControllerTXFIFO(I2C_INST, buf, 2);
     DL_I2C_startControllerTransfer(I2C_INST, SSD1306_I2C_ADDR,
         DL_I2C_CONTROLLER_DIRECTION_TX, 2);
-    while (DL_I2C_getControllerStatus(I2C_INST) & DL_I2C_CONTROLLER_STATUS_BUSY_BUS) {}
+    (void)i2c_wait_idle();
 }
 
 void BSP_OLED_Init(void)

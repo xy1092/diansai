@@ -1,5 +1,6 @@
 #include "bsp_uart.h"
 #include "../pin_map.h"
+#include "../middleware/rtt_log.h"
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -22,6 +23,7 @@ void BSP_Uart_Send(uint8_t is_openmv, const uint8_t *data, uint16_t len)
 {
     UART_Regs *inst = UART_DEBUG_INST;
     (void)is_openmv;
+    RTT_Log_Write((const char *)data, len);
     for (uint16_t i = 0; i < len; ++i) {
         while (DL_UART_Main_isBusy(inst)) {}
         DL_UART_Main_transmitData(inst, data[i]);
@@ -30,7 +32,7 @@ void BSP_Uart_Send(uint8_t is_openmv, const uint8_t *data, uint16_t len)
 
 void BSP_Uart_Printf(const char *fmt, ...)
 {
-    char buf[128];
+    char buf[256];
     va_list ap;
     va_start(ap, fmt);
     int n = vsnprintf(buf, sizeof(buf), fmt, ap);

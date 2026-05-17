@@ -3,24 +3,14 @@
 
 #define PWM_MAX  1000
 
-static inline void set_dir(uint8_t ch, int16_t duty)
+static inline void set_forward_dir(uint8_t ch)
 {
     if (ch == 0) {
-        if (duty >= 0) {
-            DL_GPIO_setPins(MOTOR_DIR_PORT, LEFT_AIN1_PIN);
-            DL_GPIO_clearPins(MOTOR_DIR_PORT, LEFT_AIN2_PIN);
-        } else {
-            DL_GPIO_clearPins(MOTOR_DIR_PORT, LEFT_AIN1_PIN);
-            DL_GPIO_setPins(MOTOR_DIR_PORT, LEFT_AIN2_PIN);
-        }
+        DL_GPIO_setPins(MOTOR_DIR_PORT, LEFT_AIN1_PIN);
+        DL_GPIO_clearPins(MOTOR_DIR_PORT, LEFT_AIN2_PIN);
     } else {
-        if (duty >= 0) {
-            DL_GPIO_setPins(MOTOR_DIR_PORT, RIGHT_BIN1_PIN);
-            DL_GPIO_clearPins(MOTOR_DIR_PORT, RIGHT_BIN2_PIN);
-        } else {
-            DL_GPIO_clearPins(MOTOR_DIR_PORT, RIGHT_BIN1_PIN);
-            DL_GPIO_setPins(MOTOR_DIR_PORT, RIGHT_BIN2_PIN);
-        }
+        DL_GPIO_setPins(MOTOR_DIR_PORT, RIGHT_BIN1_PIN);
+        DL_GPIO_clearPins(MOTOR_DIR_PORT, RIGHT_BIN2_PIN);
     }
 }
 
@@ -37,9 +27,9 @@ void BSP_Motor_SetDuty(uint8_t ch, int16_t duty)
     if (duty >  PWM_MAX) duty =  PWM_MAX;
     if (duty < 0) duty = 0;
 
-    set_dir(ch, duty);
+    set_forward_dir(ch);
 
-    uint32_t abs_duty = (duty >= 0) ? (uint32_t)duty : (uint32_t)(-duty);
+    uint32_t abs_duty = (uint32_t)duty;
     uint8_t  cc_idx   = (ch == 0) ? PWM_CH_LEFT : PWM_CH_RIGHT;
     DL_TimerA_setCaptureCompareValue(PWM_MOTOR_INST, abs_duty, cc_idx);
 }

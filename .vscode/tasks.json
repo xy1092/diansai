@@ -114,6 +114,19 @@
       "problemMatcher": []
     },
     {
+      "label": "PID: Debug Dashboard",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv-pid/bin/python",
+      "args": [
+        "${workspaceFolder}/tools/pid/pid_dashboard.py",
+        "--port", "${input:serialPort}",
+        "--line-raw"
+      ],
+      "isBackground": true,
+      "problemMatcher": []
+    },
+
+    {
       "label": "PID: Tune REPL",
       "type": "shell",
       "command": "${workspaceFolder}/.venv-pid/bin/python",
