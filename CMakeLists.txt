@@ -192,6 +192,7 @@ target_link_options(nuedc_car PRIVATE
   -Wl,-Map=${CMAKE_BINARY_DIR}/nuedc_car.map
   --specs=nano.specs
   --specs=nosys.specs
+  -Wl,-u,_printf_float
 )
 
 target_link_libraries(nuedc_car PRIVATE

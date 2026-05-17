@@ -61,6 +61,9 @@
 #define LINE_PID_KP                 82.0f
 #define LINE_PID_KI                 0.0f
 #define LINE_PID_KD                 18.0f
+#define ANG_PID_KP                  0.0f
+#define ANG_PID_KI                  0.0f
+#define ANG_PID_KD                  0.0f
 
 typedef struct {
     float x;
@@ -107,6 +110,7 @@ static float         cfg_arc_imu_hold_kp = ARC_IMU_HOLD_KP;
 
 static PID_t         pid_spd_L, pid_spd_R;
 static PID_t         pid_line;
+static PID_t         pid_ang;
 
 static volatile uint8_t flag_1ms = 0;
 static volatile uint8_t flag_5ms = 0;
@@ -123,6 +127,8 @@ static float         s_meas_speed_L   = 0.0f;   /* telemetry: 实测脉冲/控�
 static float         s_meas_speed_R   = 0.0f;
 static float         s_line_setpoint  = 0.0f;   /* telemetry: 循迹环目标恒为 0 */
 static float         s_line_bias      = 0.0f;   /* telemetry: 当前偏差快照 */
+static float         s_ang_setpoint_deg = 0.0f; /* telemetry: 航向目标 */
+static float         s_ang_meas_deg     = 0.0f; /* telemetry: 当前航向 */
 static float         s_seg_dist_cm = 0.0f;
 static uint32_t      s_mission_time_ms = 0;
 static uint32_t      s_notify_until_ms = 0;
@@ -229,6 +235,23 @@ static void reset_motion_targets(void)
     s_target_speed_R = 0.0f;
 }
 
+static void update_ang_telemetry(float target_rad, float measure_rad, float output)
+{
+    float err = wrap_pi(target_rad - measure_rad);
+
+    s_ang_setpoint_deg = target_rad * 57.2957795f;
+    s_ang_meas_deg = measure_rad * 57.2957795f;
+    pid_ang.last_setpoint = s_ang_setpoint_deg;
+    pid_ang.last_measure = s_ang_meas_deg;
+    pid_ang.last_error = err * 57.2957795f;
+    pid_ang.last_p = cfg_pose_kp_head * err;
+    pid_ang.last_i = 0.0f;
+    pid_ang.last_d = 0.0f;
+    pid_ang.last_deriv = 0.0f;
+    pid_ang.last_raw_output = output;
+    pid_ang.last_output = output;
+}
+
 static void reset_odometry(Pose2D_t pose)
 {
     s_pose = pose;
@@ -315,6 +338,8 @@ static void control_goto_pose(const RouteSegment_t *seg)
     float turn = cfg_pose_kp_head * heading_err + cfg_pose_kp_final * blend * final_err;
     float speed = pose_speed_cmd(dist, heading_err, final_err);
 
+    update_ang_telemetry(ref_heading, s_pose.theta, turn);
+
     s_target_speed_L = clampf(speed - turn, -SPEED_OUT_LIMIT, SPEED_OUT_LIMIT);
     s_target_speed_R = clampf(speed + turn, -SPEED_OUT_LIMIT, SPEED_OUT_LIMIT);
 
@@ -336,10 +361,12 @@ static void control_arc_track(const RouteSegment_t *seg)
         if (App_Tracking_GetLastBias() > 0.05f) sign = 1.0f;
         if (App_Tracking_GetLastBias() < -0.05f) sign = -1.0f;
         diff = sign * cfg_line_seek_diff + cfg_arc_imu_hold_kp * (yaw_err / 57.2957795f);
+        update_ang_telemetry(s_arc_hold_yaw_deg / 57.2957795f, s_yaw_deg / 57.2957795f, diff);
         base = cfg_seek_line_pulse;
         s_line_lost_cnt++;
     } else {
         s_arc_hold_yaw_deg = s_yaw_deg;
+        update_ang_telemetry(s_pose.theta, s_pose.theta, diff);
         s_line_lost_cnt = 0u;
     }
 
@@ -518,6 +545,7 @@ void App_Init(void)
     PID_Init(&pid_spd_L, SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, -1000.0f, 1000.0f);
     PID_Init(&pid_spd_R, SPEED_PID_KP, SPEED_PID_KI, SPEED_PID_KD, -1000.0f, 1000.0f);
     PID_Init(&pid_line, LINE_PID_KP, LINE_PID_KI, LINE_PID_KD, -0.36f, 0.36f);
+    PID_Init(&pid_ang, ANG_PID_KP, ANG_PID_KI, ANG_PID_KD, -1.0f, 1.0f);
 
     App_Tracking_Init(&pid_line);
     Proto_Init();
@@ -526,6 +554,7 @@ void App_Init(void)
     Telem_Bind(TELEM_CH_L,    &pid_spd_L, &s_target_speed_L, &s_meas_speed_L);
     Telem_Bind(TELEM_CH_R,    &pid_spd_R, &s_target_speed_R, &s_meas_speed_R);
     Telem_Bind(TELEM_CH_LINE, &pid_line,  &s_line_setpoint,  &s_line_bias);
+    Telem_Bind(TELEM_CH_ANG,  &pid_ang,   &s_ang_setpoint_deg, &s_ang_meas_deg);
     Telem_BindAppState((const uint8_t *)&s_mission, (const uint8_t *)&s_state,
                        &s_loop_index, &s_seg_index,
                        &s_pose.x, &s_pose.y, &s_pose.theta,
@@ -599,6 +628,7 @@ void App_Loop(void)
     }
 
     s_line_bias = App_Tracking_GetInfo()->bias;
+    if (s_state != STATE_RUN) update_ang_telemetry(s_pose.theta, s_pose.theta, 0.0f);
     Telem_Tick(g_tick_ms);
 
     if (s_state == STATE_READY || s_state == STATE_STOP) service_ready_state();

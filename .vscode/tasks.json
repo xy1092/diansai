@@ -114,13 +114,14 @@
       "problemMatcher": []
     },
     {
-      "label": "PID: Debug Dashboard",
+      "label": "PID: Web Dashboard",
       "type": "shell",
       "command": "${workspaceFolder}/.venv-pid/bin/python",
       "args": [
-        "${workspaceFolder}/tools/pid/pid_dashboard.py",
+        "${workspaceFolder}/tools/pid/pid_web_server.py",
         "--port", "${input:serialPort}",
-        "--line-raw"
+        "--open",
+        "--autoconnect"
       ],
       "isBackground": true,
       "problemMatcher": []

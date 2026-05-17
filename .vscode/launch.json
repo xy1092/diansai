@@ -73,8 +73,8 @@
     {
       "id": "jlinkSerialNumber",
       "type": "promptString",
-      "description": "J-Link 序列号，可留空",
-      "default": ""
+      "description": "J-Link 序列号",
+      "default": "59600183"
     }
   ]
 }

@@ -377,6 +377,51 @@ static void apply_cfg_set(const char *name, float v)
     BSP_Uart_Printf("$ERR,cfgset,bad_name\r\n");
 }
 
+static uint8_t parse_float_arg(const char *s, float *out)
+{
+    char *end = 0;
+    float v;
+
+    if (!s || !out) return 0u;
+    v = strtof(s, &end);
+    if (end == s) return 0u;
+    while (*end == ' ' || *end == '\t') ++end;
+    if (*end != 0) return 0u;
+    *out = v;
+    return 1u;
+}
+
+static uint8_t parse_set_args(char *args, char **ch, char **gain, float *value)
+{
+    char *p1;
+    char *p2;
+
+    if (!args || !ch || !gain || !value) return 0u;
+    p1 = strchr(args, ',');
+    if (!p1) return 0u;
+    *p1++ = 0;
+    p2 = strchr(p1, ',');
+    if (!p2) return 0u;
+    *p2++ = 0;
+
+    *ch = args;
+    *gain = p1;
+    return parse_float_arg(p2, value);
+}
+
+static uint8_t parse_cfg_args(char *args, char **name, float *value)
+{
+    char *p;
+
+    if (!args || !name || !value) return 0u;
+    p = strchr(args, ',');
+    if (!p) return 0u;
+    *p++ = 0;
+
+    *name = args;
+    return parse_float_arg(p, value);
+}
+
 static void handle_line(char *line)
 {
     /* 去掉末尾 \r\n */
@@ -386,16 +431,21 @@ static void handle_line(char *line)
     if (line[0] != '$') return;
 
     if (!strncmp(line, "$SET,", 5)) {
-        char ch[8], gain[4];
+        char *ch;
+        char *gain;
         float v;
-        if (sscanf(line + 5, "%7[^,],%3[^,],%f", ch, gain, &v) == 3) {
+        if (parse_set_args(line + 5, &ch, &gain, &v)) {
             apply_set(ch, gain, v);
+        } else {
+            BSP_Uart_Printf("$ERR,set,parse\r\n");
         }
     } else if (!strncmp(line, "$CFGSET,", 8)) {
-        char name[16];
+        char *name;
         float v;
-        if (sscanf(line + 8, "%15[^,],%f", name, &v) == 2) {
+        if (parse_cfg_args(line + 8, &name, &v)) {
             apply_cfg_set(name, v);
+        } else {
+            BSP_Uart_Printf("$ERR,cfgset,parse\r\n");
         }
     } else if (!strncmp(line, "$RATE,", 6)) {
         int hz = atoi(line + 6);

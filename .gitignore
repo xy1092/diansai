@@ -1,5 +1,7 @@
 build/
 build-test/
+.pio/
+.venv-pio/
 *.out
 *.bin
 *.hex
