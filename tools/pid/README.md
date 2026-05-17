@@ -1,28 +1,36 @@
 # PID 调参工具链
 
-MCU 串口遥测 + PC 端实时采集 / 调参 / 离线分析。
+MCU 串口遥测 + PC 端网页仪表盘 + 离线分析。
 
 ## 一、串口协议
 
 波特率 `115200 8N1`，走调试串口（XDS110 → `/dev/ttyACM0`）。
 
-**MCU → PC（每 10 ms 一行）**
+**MCU → PC**
+
 ```
 $P,<ts_ms>,<ch>,<sp>,<meas>,<out>,<err>,<integ>,<deriv>,<p>,<i>,<d>,<raw_out>
 $L,<ts_ms>,<bias>,<contrast>,<strength>,<on_line>,<r0>,...,<r6>
+$A,<ts_ms>,<mission>,<state>,<loop>,<seg>,<x>,<y>,<theta_deg>,<seg_cm>,<mission_time_ms>
+$G,<ch>,<kp>,<ki>,<kd>                     # 让 MCU 回传当前增益
+$C,<param>,<value>,<min>,<max>             # 运行参数
+$B,...                                     # RAM 黑匣子帧
 ```
 `ch ∈ {L, R, LINE, ANG}`。
-CSV 里会带 `kind` 列：`pid` 表示 PID 遥测，`line` 表示 7 路灰度原始采样。
 
 **PC → MCU**
+
 ```
-$SET,L,KP,2.50     改左轮速度环 Kp
-$SET,line,KD,0.10  改循迹环 Kd  （通道名大小写不敏感）
-$RATE,200          遥测 200 Hz
-$RAWLINE,1         打开 7 路灰度原始流
-$RST               所有积分归零
-$PAUSE / $RESUME   停/续发送
-$DUMP              让 MCU 回传当前增益
+$SET,L,KP,2.50                改左轮速度环 Kp
+$SET,line,KD,0.10             改循迹环 Kd（通道大小写不敏感）
+$CFGSET,spd_max,0.7           改运行参数
+$RATE,200                     遥测 200 Hz
+$RAWLINE,1                    打开 7 路灰度原始流
+$RST                          所有积分归零
+$PAUSE / $RESUME              停/续发送
+$DUMP                         让 MCU 回传当前增益
+$CFGDUMP                      让 MCU 回传所有运行参数
+$LOG,1 / $LOG,0 / $LOGCLR / $LOGDUMP   黑匣子控制
 ```
 
 ## 二、一次性准备
@@ -31,128 +39,83 @@ $DUMP              让 MCU 回传当前增益
 ../../scripts/setup_pid_env.sh
 ```
 
-默认会在项目根目录创建本地虚拟环境 `.venv-pid`。
-在 VS Code 里也可以直接运行任务 `PID: Install Python deps`。
+会在项目根创建 `.venv-pid` 并装好 `pyserial / fastapi / uvicorn / matplotlib / pandas / prompt_toolkit`。
+VS Code 里运行任务 `PID: Install Python deps` 也一样。
 
-## 三、典型工作流
-
-1. **先只采集不调参**（实时图）
-
-   ```bash
-   python3 pid_monitor.py --port /dev/ttyACM0 --channels L R LINE
-   ```
-   关掉窗口即停止，数据已落在 `logs/run_YYYYMMDD_HHMMSS.csv`。
-
-   若要把 7 路灰度原始值一起自动记录进 CSV：
-
-   ```bash
-   python3 pid_monitor.py --port /dev/ttyACM0 --line-raw --no-plot
-   ```
-   `pid_monitor.py` 会在启动时自动向 MCU 发送 `RATE / RAWLINE / RESUME / DUMP`。
-
-   若想要一个更适合现场调试的可视化面板，可以直接开：
-
-   ```bash
-   python3 pid_dashboard.py --port /dev/ttyACM0 --line-raw
-   ```
-   它会显示：
-   - `Setpoint / Measure` 曲线
-   - `Output` 曲线
-   - 指定通道的 `P / I / D` 三项曲线
-   - 7 路灰度柱状图
-   - 最新值面板和消息窗口
-
-   面板上自带这些按键：
-   - `Resume / Pause`
-   - `Reset PID`
-   - `Dump Gains`
-   - `Apply Rate`
-   - `Apply RawLine`
-   - `Clear Curves`
-   - `New Log File`
-
-   在 VS Code 里也可以直接运行任务 `PID: Debug Dashboard`。
-
-2. **一边跑车一边改增益**（分两个终端）
-
-   ```bash
-   # 终端 A
-   python3 pid_monitor.py --port /dev/ttyACM0 --channels L R LINE
-
-   # 终端 B
-   python3 pid_tune.py --port /dev/ttyACM0
-   >> set L kp 2.8
-   >> set L ki 0.6
-   >> rawline on
-   >> rst
-   ```
-   > 注意：**同一串口不能被两个进程同时独占**。推荐做法是 `pid_monitor.py`
-   > 专注读，`pid_tune.py` 只写；或者用 `socat` 做串口分叉。最省事：
-   > 在 monitor 里 Ctrl-C 中断后再开 tune，交替做。
-
-3. **事后对比 / 出图**
-
-   在 VS Code 里打开 `pid_analyze.ipynb`，改掉 `CSV_PATH`，逐段运行。
-
-## 四、socat 同端口双进程（Linux）
-
-若想 **同时** 跑 monitor 和 tune，用 socat 把 `/dev/ttyACM0` 分叉成两条虚拟口：
+## 三、推荐工作流：网页仪表盘
 
 ```bash
-socat -d -d pty,raw,echo=0,link=/tmp/ttyV0 pty,raw,echo=0,link=/tmp/ttyV1 &
-# 然后把实际设备用自己写的小脚本 bridge 进 /tmp/ttyV0，
-# monitor 和 tune 都连 /tmp/ttyV1。
+# USB 直连
+./scripts/open_pid_dashboard.sh /dev/ttyACM0
+
+# ESP32 透传（Wi-Fi）—— 端口写 socket:// 即可
+./scripts/open_pid_dashboard.sh socket://192.168.1.20:3333
 ```
-这种用法不常用，一般"交替开"就够了。
 
-## 五、和 VS Code 断点调试一起用
+启动后浏览器自动打开 `http://127.0.0.1:8765`，看到的内容：
 
-推荐现场流程：
+| 区域 | 内容 |
+|---|---|
+| 顶部状态栏 | 左轮 meas / 右轮 meas / 循迹 bias / heading / 任务+状态 / 运行时间 |
+| 概览页 | 四个 PID 模块卡片：左轮 / 右轮 / 循迹 / 角度 |
+| 每个 PID 卡片 | 圆环仪表盘（实时 meas，sp 指针）+ sp/meas 曲线 + KP/KI/KD 调参 |
+| 循迹卡片 | bias 指针仪表 + 7 路灰度柱状图 |
+| 运行参数页 | 自动从 `$CFGDUMP` 拉取，可直接改写 `$CFGSET` |
+| 黑匣子页 | `开启 / 停止 / 清空 / 导出` 按钮 + 自动落 CSV |
+| 控制台页 | 原始消息 + 自定义命令 |
 
-1. 先运行任务 `PID: Debug Dashboard`
-2. 再按 `F5`，选 `F5 Debug MSPM0G3507 (J-Link GDB Server)`
-3. 在 VS Code 里下断点、单步、看变量
-4. 在 Dashboard 里看实时曲线，并用按钮发 `$PAUSE / $RESUME / $RST / $DUMP`
+后端独占串口，前端通过 WebSocket 推送；同一个浏览器多开标签、或在手机上访问 `http://<电脑IP>:8765` 都可以。
 
-说明：
-- Dashboard 里的 `Pause / Resume` 控制的是 **遥测流**，方便你暂停界面刷新或继续观察。
-- 真正的断点暂停、继续执行，还是通过 VS Code 调试器控制。
+### 直接调用 Python（不通过 shell 脚本）
 
-## 六、典型调参 checklist
+```bash
+python3 tools/pid/pid_web_server.py --port /dev/ttyACM0 --open --autoconnect
+python3 tools/pid/pid_web_server.py --port socket://192.168.1.20:3333 --host 0.0.0.0 --web-port 8765
+```
+
+## 四、Wi-Fi 透传适配
+
+`tools/esp32_wifi_uart_bridge/esp32_wifi_uart_bridge.ino` 把 ESP32 配成 TCP 透传：
+
+- ESP32 加入 Wi-Fi 后，在 `TCP_PORT = 3333` 上等连接
+- 把 ESP32 的 UART2 接到 MCU 的调试串口 TX/RX（共地）
+- 在仪表盘的"端口"栏写 `socket://<esp32-ip>:3333`，点连接即可
+
+后端用 `serial.serial_for_url()`，所以 `socket://` / `rfc2217://` / `/dev/ttyACM0` 都走同一套代码。
+
+## 五、命令行 REPL（备用）
+
+```bash
+python3 tools/pid/pid_tune.py --port /dev/ttyACM0
+>> set L kp 2.8
+>> set L ki 0.6
+>> rawline on
+>> rst
+```
+
+> 同一物理串口不能同时被网页仪表盘和 REPL 独占。要并行使用，请用 ESP32 透传或 socat 把串口分叉。
+
+## 六、事后离线分析
+
+`tools/pid/logs/` 里会自动落 CSV：
+
+- `dashboard_YYYYMMDD_HHMMSS.csv`：实时遥测全量
+- `dashboard_YYYYMMDD_HHMMSS_blackbox.csv`：每次 `$LOGDUMP` 后的 RAM 黑匣子
+
+打开 `pid_analyze.ipynb`，改掉 `CSV_PATH`，逐段运行画图。
+
+## 七、典型调参 checklist
 
 - [ ] **速度环 Kp**：给阶跃（固定 target_speed），观察 rise time；目标 < 200 ms
 - [ ] **速度环 Ki**：等稳态误差出来后加，注意积分限幅别打满
 - [ ] **循迹环 Kd**：只在有明显抖动时加，起步设 0
 - [ ] **采样率**：建议内环 1 kHz，外环 200 Hz；遥测默认 100 Hz 够用
 
-## 现场无电脑跑车 + 回来导出日志
+## 八、现场无电脑跑车 + 回来导出黑匣子
 
-固件现在带 RAM 黑匣子，默认每 100 ms 记录一帧关键数据：任务、状态、圈数、段号、位姿、左右轮目标/实测/输出、循迹偏差、灰度强度。断电会丢，但只要跑完不断电，回来插串口就能导出。
+固件带 RAM 黑匣子，默认每 100 ms 记录一帧。断电会丢，只要跑完不断电就能导出。
 
-推荐流程：
-
-1. 插线打开 Dashboard，点 `Clear Log`，确认黑匣子清空。
-2. 点 `Enable Log`，然后可以断开串口，把车放到场地跑。
-3. 跑完不要断电，重新插线连接 Dashboard。
-4. 点 `Dump Log`，会生成 `*_blackbox.csv`。
-5. 点 `Save AI Pack`，会生成 `*_ai_pack.json`，把这个 JSON 和 CSV 给 AI 分析最方便。
-
-常用命令也可以手动发：
-
-```text
-$LOG,1      开启黑匣子
-$LOGCLR     清空黑匣子
-$LOGDUMP    导出黑匣子
-```
-
-实时串口遥测默认关闭，Dashboard 连接后会自动发送 `$RESUME`。这样现场不连电脑时，小车不会一直往串口刷日志。
-
-## 预留无线 J-Link / RTT
-
-`bsp_uart.c` 会把同一份遥测同时写入 SEGGER RTT 上行缓冲。以后有无线 J-Link 后，可以继续用：
-
-```bash
-python3 tools/pid/capture_rtt.py --duration 30
-```
-
-RTT 采集适合无线实时记录；串口黑匣子适合现在这种“先跑，回来插线导出”的方式。
+1. 插线打开仪表盘，"黑匣子页"点 `清空`
+2. 点 `开启 LOG`，断开串口，把车放到场地跑
+3. 跑完不要断电，重新插线连接仪表盘
+4. 点 `导出` → 等 `$BEND` → 点 `保存 CSV`
