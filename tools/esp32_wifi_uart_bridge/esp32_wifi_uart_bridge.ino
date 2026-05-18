@@ -3,8 +3,16 @@
 // ESP32 WiFi UART bridge for NUEDC car telemetry/tuning.
 // PC connects to TCP port 3333; ESP32 bridges TCP <-> UART2.
 
-static const char *AP_SSID = "NUEDC-CAR-UART";
-static const char *AP_PASS = "12345678";
+#ifndef NUEDC_AP_SSID
+#define NUEDC_AP_SSID "NUEDC-CAR-UART"
+#endif
+
+#ifndef NUEDC_AP_PASS
+#define NUEDC_AP_PASS "change-me-1234"
+#endif
+
+static const char *AP_SSID = NUEDC_AP_SSID;
+static const char *AP_PASS = NUEDC_AP_PASS;
 static const uint16_t TCP_PORT = 3333;
 
 static const int UART_RX_PIN = 16;  // ESP32 RX2, connect to MSPM0 UART TX

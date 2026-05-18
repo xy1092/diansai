@@ -31,9 +31,6 @@ endfunction()
 
 if(NOT MSPM0_SDK_ROOT)
   foreach(candidate IN ITEMS
-    "/home/xy/ti/mspm0_sdk_2_10_00_04"
-    "/home/xy/ti/mspm0_sdk_2_07_00_05"
-    "/home/xy/ti/mspm0_sdk"
     "/opt/ti/mspm0_sdk"
     "$ENV{HOME}/ti/mspm0_sdk_2_10_00_04"
     "$ENV{HOME}/ti/mspm0_sdk_2_07_00_05"

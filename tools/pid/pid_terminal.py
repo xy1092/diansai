@@ -194,8 +194,7 @@ def call_ai_tune(records: list[dict], channels: list[str]):
         print(f"\n{CYAN}正在询问 AI...{RESET}")
         try:
             proc = subprocess.run(
-                ["claude", "-p", prompt, "--output-format", "text",
-                 "--max-tokens", "1024"],
+                ["claude", "-p", prompt, "--output-format", "text"],
                 capture_output=True, text=True, timeout=30,
             )
             if proc.returncode == 0 and proc.stdout.strip():

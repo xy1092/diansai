@@ -118,7 +118,10 @@ def run_logger(args: argparse.Namespace, raw_path: Path) -> subprocess.Popen:
 
 def main() -> int:
     project = Path(__file__).resolve().parents[2]
-    default_logger = "/home/xy/下载/JLink_Linux_V938_x86_64/JLinkRTTLoggerExe"
+    default_logger = os.environ.get(
+        "JLINK_RTT_LOGGER",
+        str(Path.home() / "JLink_Linux_V938_x86_64" / "JLinkRTTLoggerExe"),
+    )
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--rtt-logger", default=default_logger)

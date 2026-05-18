@@ -3,7 +3,7 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-export CCS_DIR="${CCS_DIR:-/home/xy/ti/ccs2050/ccs}"
+export CCS_DIR="${CCS_DIR:-$HOME/ti/ccs2050/ccs}"
 export TI_ARM_CLANG_DIR="${TI_ARM_CLANG_DIR:-$CCS_DIR/tools/compiler/ti-cgt-armllvm_4.0.4.LTS}"
 export TI_ARM_CLANG_BIN="${TI_ARM_CLANG_BIN:-$TI_ARM_CLANG_DIR/bin}"
 export SYSCFG_DIR="${SYSCFG_DIR:-$CCS_DIR/utils/sysconfig_1.27.0}"
@@ -22,11 +22,6 @@ export JLINK_GDB_SERVER="${JLINK_GDB_SERVER:-$(command -v JLinkGDBServerCLExe ||
 
 if [[ -z "${MSPM0_SDK_ROOT:-}" ]]; then
   for sdk_dir in \
-    "/home/xy/ti/mspm0_sdk_2_10_00_04/mspm0_sdk_2_10_00_04" \
-    "/home/xy/ti/mspm0_sdk_2_10_00_04" \
-    "/home/xy/ti/mspm0_sdk_2_07_00_05/mspm0_sdk_2_07_00_05" \
-    "/home/xy/ti/mspm0_sdk_2_07_00_05" \
-    "/home/xy/ti/mspm0_sdk" \
     "/opt/ti/mspm0_sdk" \
     "$HOME/ti/mspm0_sdk_2_10_00_04/mspm0_sdk_2_10_00_04" \
     "$HOME/ti/mspm0_sdk_2_10_00_04" \
@@ -42,8 +37,7 @@ fi
 
 if [[ -z "${JLINK_EXE:-}" ]]; then
   for jlink_dir in \
-    "/home/xy/下载/JLink_Linux_V938_x86_64" \
-    "$HOME/下载/JLink_Linux_V938_x86_64" \
+    "$HOME/Downloads/JLink_Linux_V938_x86_64" \
     "$HOME/JLink_Linux_V938_x86_64" \
     "/opt/SEGGER/JLink"
   do

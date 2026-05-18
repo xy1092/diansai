@@ -12,11 +12,11 @@ cat <<'EOF'
   文件名: mspm0_sdk_2_10_00_04.run
 
 建议安装到：
-  /home/xy/ti/mspm0_sdk_2_10_00_04
+  $HOME/ti/mspm0_sdk_2_10_00_04
 
 安装完成后，确认以下文件存在：
-  /home/xy/ti/mspm0_sdk_2_10_00_04/.metadata/product.json
-  /home/xy/ti/mspm0_sdk_2_10_00_04/source/ti/driverlib/dl_common.h
+  $HOME/ti/mspm0_sdk_2_10_00_04/.metadata/product.json
+  $HOME/ti/mspm0_sdk_2_10_00_04/source/ti/driverlib/dl_common.h
 
 然后重新运行：
   ./scripts/check_env.sh
