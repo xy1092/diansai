@@ -16,6 +16,7 @@
     <nav class="nav">
       <button class="nav-item active" data-view="overview"><i>⌂</i><span>概览</span></button>
       <button class="nav-item" data-view="pid"><i>≡</i><span>PID 调参</span></button>
+      <button class="nav-item" data-view="ai"><i>✦</i><span>AI 调试</span></button>
       <button class="nav-item" data-view="params"><i>⚙</i><span>运行参数</span></button>
       <button class="nav-item" data-view="logs"><i>▤</i><span>黑匣子</span></button>
       <button class="nav-item" data-view="console"><i>›_</i><span>控制台</span></button>
@@ -177,6 +178,59 @@
       <div class="card">
         <header class="card-head"><div class="card-title">PID 总览（同 概览 页面）</div></header>
         <div class="card-body"><p class="muted">用 概览 页面调参更直观。本页保留是为了后期分通道大图细看。</p></div>
+      </div>
+    </section>
+
+    <section class="view view-ai" data-view="ai">
+      <div class="card">
+        <header class="card-head">
+          <div class="card-title">AI 调试助手</div>
+          <div class="card-actions">
+            <span class="muted" id="ai-status">等待采样</span>
+          </div>
+        </header>
+        <div class="card-body ai-body">
+          <div class="ai-controls">
+            <label>通道
+              <select id="ai-channel">
+                <option value="LINE">循迹环 LINE</option>
+                <option value="L">左轮速度 L</option>
+                <option value="R">右轮速度 R</option>
+                <option value="L,R">左右速度 L+R</option>
+                <option value="ANG">角度环 ANG</option>
+              </select>
+            </label>
+            <label>AI 引擎
+              <select id="ai-provider">
+                <option value="local">本地规则</option>
+                <option value="claude">Claude Code</option>
+                <option value="codex">Codex</option>
+              </select>
+            </label>
+            <label>采样窗口
+              <input id="ai-seconds" type="number" min="1" max="30" step="1" value="8">
+            </label>
+            <label>步进强度
+              <input id="ai-aggr" type="range" min="0.1" max="1" step="0.1" value="0.5">
+            </label>
+            <label>最大轮数
+              <input id="ai-rounds" type="number" min="1" max="50" step="1" value="12">
+            </label>
+            <button id="btn-ai-analyze" class="btn primary">分析建议</button>
+            <button id="btn-ai-apply" class="btn">应用建议</button>
+            <button id="btn-ai-auto-start" class="btn primary">开始自动</button>
+            <button id="btn-ai-auto-stop" class="btn">停止</button>
+          </div>
+          <div class="ai-auto-strip">
+            <span id="ai-auto-state">自动调试未运行</span>
+            <span id="ai-auto-round">0 / 0 轮</span>
+            <span id="ai-auto-stable">稳定 0 轮</span>
+            <span id="ai-auto-reason"></span>
+          </div>
+          <div id="ai-results" class="ai-results">
+            <div class="muted">连接小车并跑几秒遥测后，点击“分析建议”。</div>
+          </div>
+        </div>
       </div>
     </section>
 

@@ -34,6 +34,49 @@ $DUMP              让 MCU 回传当前增益
 默认会在项目根目录创建本地虚拟环境 `.venv-pid`。
 在 VS Code 里也可以直接运行任务 `PID: Install Python deps`。
 
+## Web Dashboard
+
+推荐现场调参优先使用新版 Web 面板：
+
+```bash
+../../scripts/open_pid_dashboard.sh /dev/ttyACM0
+```
+
+ESP32 Wi-Fi UART 透传：
+
+```bash
+../../scripts/open_pid_dashboard.sh socket://192.168.4.1:3333
+```
+
+启动后打开：
+
+```text
+http://127.0.0.1:8765/
+```
+
+手机访问时用：
+
+```bash
+HOST=0.0.0.0 ../../scripts/open_pid_dashboard.sh socket://192.168.4.1:3333
+```
+
+Web 面板功能：
+
+- 实时显示 `L/R/LINE/ANG` 四路 PID 曲线
+- 写入/读回 PID 参数
+- 调运行参数和黑匣子
+- AI 调试页支持 `本地规则 / Claude Code / Codex`
+- 自动闭环调参：点击开始后自动采样、分析、写入，直到稳定或手动停止
+
+Claude/Codex 调参需要本机已安装并登录对应 CLI：
+
+```bash
+claude --help
+codex --help
+```
+
+模型建议会先经过后端安全校验：单轮变化不超过 20%，参数非负，输出格式必须是 JSON；失败时自动回退本地规则。
+
 ## 三、典型工作流
 
 1. **先只采集不调参**（实时图）

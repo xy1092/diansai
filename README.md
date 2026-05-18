@@ -63,6 +63,98 @@
 - `Serial Monitor 115200`
 - `SDK Install Hint`
 - `udev Rules Hint`
+- `PID: Web Dashboard`
+
+## Web 控制面板与 AI 调参
+
+当前工程内置新版 Web PID 控制面板：
+
+- 后端：[tools/pid/pid_web_server.py](/home/xy/ti-workspace/projects/nuedc_car/tools/pid/pid_web_server.py)
+- 前端：[tools/pid/web/](/home/xy/ti-workspace/projects/nuedc_car/tools/pid/web)
+- 启动脚本：[scripts/open_pid_dashboard.sh](/home/xy/ti-workspace/projects/nuedc_car/scripts/open_pid_dashboard.sh)
+
+安装依赖：
+
+```bash
+./scripts/setup_pid_env.sh
+```
+
+USB 串口启动：
+
+```bash
+./scripts/open_pid_dashboard.sh /dev/ttyACM0
+```
+
+ESP32 Wi-Fi UART 透传启动：
+
+```bash
+./scripts/open_pid_dashboard.sh socket://192.168.4.1:3333
+```
+
+启动后默认访问：
+
+```text
+http://127.0.0.1:8765/
+```
+
+如果要让手机访问电脑上的面板：
+
+```bash
+HOST=0.0.0.0 ./scripts/open_pid_dashboard.sh socket://192.168.4.1:3333
+```
+
+然后手机打开电脑在同一网络下的地址，例如：
+
+```text
+http://192.168.4.2:8765/
+```
+
+面板支持：
+
+- `L/R/LINE/ANG` 四路 PID 实时曲线
+- PID 写入与读回：`$SET` / `$DUMP`
+- 运行参数写入：`$CFGSET`
+- 黑匣子导出：`$LOGDUMP`
+- AI 调试页：
+  - 本地规则调参
+  - Claude Code CLI
+  - Codex CLI
+  - 自动闭环调参，点击开始后循环采样、分析、写入，直到连续稳定、达到最大轮数或手动停止
+
+AI 调参有安全限制：单轮参数变化不超过当前值的 20%，参数不会写成负数，Claude/Codex 输出必须是 JSON；模型不可用、超时或输出不合规时会回退到本地规则建议。
+
+控制面板也已单独拆到独立仓库：
+
+```text
+git@github.com:xy1092/diansai-control-ui.git
+```
+
+## ESP32 Wi-Fi UART Bridge
+
+ESP32 透传固件位于：
+
+- [platformio.ini](/home/xy/ti-workspace/projects/nuedc_car/platformio.ini)
+- [tools/esp32_wifi_uart_bridge/esp32_wifi_uart_bridge.ino](/home/xy/ti-workspace/projects/nuedc_car/tools/esp32_wifi_uart_bridge/esp32_wifi_uart_bridge.ino)
+
+编译：
+
+```bash
+platformio run -e esp32devkitv1_uart_bridge
+```
+
+默认 AP：
+
+```text
+SSID: NUEDC-CAR-UART
+PASS: 12345678
+TCP : 192.168.4.1:3333
+```
+
+Web 面板连接串填写：
+
+```text
+socket://192.168.4.1:3333
+```
 
 ## 脚本说明
 

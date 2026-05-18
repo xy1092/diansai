@@ -38,6 +38,8 @@ const state = {
   params: {},
   csv_path: null,
   blackbox: { count: 0, active: false },
+  ai: { results: [], pending: false },
+  aiAuto: { running: false, round: 0, stable_rounds: 0, max_rounds: 0, reason: "" },
 };
 
 // -------- helpers --------
@@ -109,6 +111,59 @@ async function pullPid(ch) {
   await api("/api/log/dump_gains", {});
 }
 
+function aiSelectedChannels() {
+  const raw = $("#ai-channel")?.value || "LINE";
+  return raw.split(",").map(s => s.trim()).filter(Boolean);
+}
+
+function aiProvider() {
+  return $("#ai-provider")?.value || "local";
+}
+
+async function runAiTune(apply=false) {
+  const seconds = parseFloat($("#ai-seconds").value) || 8;
+  const aggressiveness = parseFloat($("#ai-aggr").value) || 0.5;
+  const channels = aiSelectedChannels();
+  const provider = aiProvider();
+  state.ai.pending = true;
+  setText("#ai-status", apply ? "正在写入建议..." : `正在询问 ${provider}...`);
+  const r = await api("/api/ai/tune", { channels, seconds, aggressiveness, apply, provider });
+  state.ai.pending = false;
+  if (!r.ok) {
+    setText("#ai-status", "分析失败");
+    renderAiResults([{ ch: channels.join(","), error: r.error || "unknown error" }]);
+    return;
+  }
+  state.ai.results = r.results || [];
+  setText("#ai-status", apply ? `已写入 ${r.sent?.length || 0} 条` : "建议已生成");
+  renderAiResults(state.ai.results);
+  if (apply && r.sent?.length) log("AI apply: " + r.sent.join(" / "), "send");
+}
+
+async function startAiAuto() {
+  const seconds = parseFloat($("#ai-seconds").value) || 8;
+  const aggressiveness = parseFloat($("#ai-aggr").value) || 0.4;
+  const max_rounds = parseInt($("#ai-rounds").value, 10) || 12;
+  const channels = aiSelectedChannels();
+  const provider = aiProvider();
+  setText("#ai-status", "自动调试启动中...");
+  const r = await api("/api/ai/auto/start", {
+    channels, seconds, aggressiveness, interval: 2.0, max_rounds, provider
+  });
+  if (!r.ok) {
+    setText("#ai-status", "自动调试启动失败");
+    log("auto tune failed: " + (r.error || ""), "err");
+    return;
+  }
+  onAiAuto(r.auto);
+}
+
+async function stopAiAuto() {
+  const r = await api("/api/ai/auto/stop", {});
+  if (!r.ok) log("auto stop failed: " + (r.error || ""), "err");
+  else onAiAuto(r.auto);
+}
+
 // -------- WebSocket --------
 function connectWs() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -135,6 +190,8 @@ function handleEvent(msg) {
     case "cfg":      onCfg(msg.data); break;
     case "blackbox": onBlackbox(msg.data); break;
     case "status":   onStatus(msg.data); break;
+    case "ai_tune":  onAiTune(msg.data); break;
+    case "ai_auto":  onAiAuto(msg.data); break;
     case "log":      log(msg.data.text, msg.data.text.startsWith(">>") ? "send" : "recv"); break;
   }
 }
@@ -149,6 +206,7 @@ function applySnapshot(s) {
   if (s.params) state.params = s.params;
   if (s.latest_line) state.line = { ...state.line, ...s.latest_line };
   if (s.latest_app) state.app = s.latest_app;
+  if (s.ai_auto) onAiAuto(s.ai_auto);
   if (s.channels) {
     for (const ch of CH) {
       if (!s.channels[ch]) continue;
@@ -236,6 +294,31 @@ function onStatus(d) {
   log(d.text, "sys");
 }
 
+function onAiTune(d) {
+  state.ai.results = d.results || [];
+  renderAiResults(state.ai.results);
+  setText("#ai-status", d.applied ? "建议已应用" : "建议已生成");
+}
+
+function onAiAuto(d) {
+  if (!d) return;
+  state.aiAuto = { ...state.aiAuto, ...d };
+  if (d.last_results?.length) {
+    state.ai.results = d.last_results;
+    renderAiResults(d.last_results);
+  }
+  const running = !!d.running;
+  setText("#ai-auto-state", running ? "自动调试运行中" : "自动调试已停止");
+  setText("#ai-auto-round", `${d.round || 0} / ${d.max_rounds || 0} 轮`);
+  setText("#ai-auto-stable", `稳定 ${d.stable_rounds || 0} 轮`);
+  setText("#ai-auto-reason", d.reason ? `原因: ${d.reason}` : "");
+  setText("#ai-status", running ? "自动闭环调参中" : (d.reason ? `已停止: ${d.reason}` : "等待采样"));
+  const startBtn = $("#btn-ai-auto-start");
+  const stopBtn = $("#btn-ai-auto-stop");
+  if (startBtn) startBtn.disabled = running;
+  if (stopBtn) stopBtn.disabled = !running;
+}
+
 function refreshConn() {
   const dot = $("#conn-dot");
   const txt = $("#conn-text");
@@ -289,6 +372,63 @@ function renderParams() {
       if (!r.ok) log("cfg set failed: " + (r.error || ""), "err");
     });
   });
+}
+
+function renderAiResults(results) {
+  const wrap = $("#ai-results");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  if (!results || results.length === 0) {
+    wrap.innerHTML = `<div class="muted">还没有建议。</div>`;
+    return;
+  }
+  for (const rec of results) {
+    const div = document.createElement("div");
+    div.className = "ai-result";
+    if (rec.error) {
+      div.innerHTML = `
+        <div class="ai-result-head">
+          <strong>${rec.ch}</strong>
+          <span class="badge warn">NO DATA</span>
+        </div>
+        <div class="ai-error">${rec.error}</div>`;
+      wrap.appendChild(div);
+      continue;
+    }
+    const m = rec.metrics || {};
+    const flags = rec.flags || {};
+    const flagText = Object.entries(flags).filter(([, v]) => v).map(([k]) => k).join(" · ") || "stable";
+    const current = rec.current || {};
+    const suggested = rec.suggested || {};
+    const rows = ["kp", "ki", "kd"].map(k => `
+      <tr>
+        <td>${k.toUpperCase()}</td>
+        <td>${fmt(current[k], 5)}</td>
+        <td>${fmt(suggested[k], 5)}</td>
+        <td class="${suggested[k] > current[k] ? "up" : suggested[k] < current[k] ? "down" : ""}">
+          ${suggested[k] > current[k] ? "↑" : suggested[k] < current[k] ? "↓" : "·"}
+        </td>
+      </tr>`).join("");
+    div.innerHTML = `
+      <div class="ai-result-head">
+        <strong>${rec.ch}</strong>
+        <span class="badge ${rec.confidence === "high" ? "ok" : rec.confidence === "medium" ? "line" : "warn"}">${rec.provider || "local"} · ${rec.confidence}</span>
+      </div>
+      <div class="ai-metrics">
+        <span>样本 ${rec.samples}</span>
+        <span>MAE ${fmt(m.mae, 5)}</span>
+        <span>bias ${fmt(m.bias, 5)}</span>
+        <span>σ ${fmt(m.sigma, 5)}</span>
+        <span>过零 ${m.sign_changes ?? 0}</span>
+      </div>
+      <div class="ai-flags">${flagText}</div>
+      <table class="ai-table">
+        <thead><tr><th></th><th>当前</th><th>建议</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <ul class="ai-notes">${(rec.notes || []).map(n => `<li>${n}</li>`).join("")}</ul>`;
+    wrap.appendChild(div);
+  }
 }
 
 // -------- drawing --------
@@ -480,6 +620,10 @@ function wireUi() {
   $("#btn-reset-pid").addEventListener("click", () => api("/api/log/reset_pid", {}));
   $("#btn-cfgdump").addEventListener("click", () => api("/api/log/dump_cfg", {}));
   $("#btn-clear-log").addEventListener("click", () => { $("#console-out").innerHTML = ""; });
+  $("#btn-ai-analyze").addEventListener("click", () => runAiTune(false));
+  $("#btn-ai-apply").addEventListener("click", () => runAiTune(true));
+  $("#btn-ai-auto-start").addEventListener("click", startAiAuto);
+  $("#btn-ai-auto-stop").addEventListener("click", stopAiAuto);
 
   $$("[data-apply]").forEach(b => b.addEventListener("click", () => applyPid(b.dataset.apply)));
   $$("[data-pull]").forEach(b => b.addEventListener("click", () => pullPid(b.dataset.pull)));

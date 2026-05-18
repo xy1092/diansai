@@ -18,6 +18,9 @@ import datetime as dt
 import json
 import os
 import queue
+import statistics
+import shutil
+import subprocess
 import threading
 import time
 import webbrowser
@@ -31,7 +34,7 @@ import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 HERE = Path(__file__).resolve().parent
 WEB_DIR = HERE / "web"
@@ -405,12 +408,330 @@ class RawlineReq(BaseModel):
     on: bool
 
 
+class AiTuneReq(BaseModel):
+    channels: list[str] = Field(default_factory=lambda: ["LINE"])
+    seconds: float = 8.0
+    aggressiveness: float = 0.5
+    apply: bool = False
+    provider: str = "local"
+
+
+class AiAutoReq(BaseModel):
+    channels: list[str] = Field(default_factory=lambda: ["LINE"])
+    seconds: float = 8.0
+    aggressiveness: float = 0.4
+    interval: float = 2.0
+    max_rounds: int = 12
+    provider: str = "local"
+
+
+def _mean(vals: list[float]) -> float:
+    return statistics.fmean(vals) if vals else 0.0
+
+
+def _stdev(vals: list[float]) -> float:
+    return statistics.stdev(vals) if len(vals) >= 2 else 0.0
+
+
+def _clamp(v: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, v))
+
+
+def _round_gain(v: float) -> float:
+    if abs(v) >= 100:
+        return round(v, 2)
+    if abs(v) >= 10:
+        return round(v, 3)
+    return round(v, 5)
+
+
+def analyze_pid_channel(ch: str, samples: list[dict], gains: dict, aggressiveness: float) -> dict[str, Any]:
+    errs = [float(r["err"]) for r in samples]
+    outs = [float(r["out"]) for r in samples]
+    meas = [float(r["meas"]) for r in samples]
+    sps = [float(r["sp"]) for r in samples]
+    p_terms = [float(r["p"]) for r in samples]
+    i_terms = [float(r["i"]) for r in samples]
+    d_terms = [float(r["d"]) for r in samples]
+
+    amp = max(abs(v) for v in errs) if errs else 0.0
+    mae = _mean([abs(v) for v in errs])
+    bias = _mean(errs)
+    sigma = _stdev(errs)
+    out_abs = _mean([abs(v) for v in outs])
+    out_peak = max(abs(v) for v in outs) if outs else 0.0
+    p_abs = _mean([abs(v) for v in p_terms])
+    i_abs = _mean([abs(v) for v in i_terms])
+    d_abs = _mean([abs(v) for v in d_terms])
+    span_meas = (max(meas) - min(meas)) if meas else 0.0
+    span_sp = (max(sps) - min(sps)) if sps else 0.0
+
+    sign_changes = 0
+    for prev, cur in zip(errs, errs[1:]):
+        if prev == 0 or cur == 0:
+            continue
+        if prev * cur < 0:
+            sign_changes += 1
+
+    ratio = (sigma / (mae + 1e-6)) if mae > 1e-6 else 0.0
+    oscillating = sign_changes >= max(4, len(errs) // 18) and ratio > 0.75
+    steady_bias = abs(bias) > max(0.02, mae * 0.45) and sign_changes <= max(2, len(errs) // 35)
+    sluggish = not oscillating and mae > max(0.03, span_sp * 0.25) and out_peak < 850
+    saturated = out_peak > 920
+    noisy_d = d_abs > max(p_abs * 0.85, 1.0) and sign_changes > 3
+
+    kp = float(gains.get("kp", 0.0))
+    ki = float(gains.get("ki", 0.0))
+    kd = float(gains.get("kd", 0.0))
+    next_gains = {"kp": kp, "ki": ki, "kd": kd}
+    notes: list[str] = []
+
+    gain_step = _clamp(float(aggressiveness), 0.1, 1.0)
+    small_up = 1.0 + 0.08 * gain_step
+    med_up = 1.0 + 0.16 * gain_step
+    small_down = 1.0 - 0.08 * gain_step
+    med_down = 1.0 - 0.16 * gain_step
+
+    if oscillating:
+        next_gains["kp"] *= med_down
+        next_gains["kd"] *= small_up if kd > 0 else 1.0
+        if ki > 0:
+            next_gains["ki"] *= small_down
+        notes.append("误差频繁过零且标准差偏高，先压低 Kp；已有 Kd 时略增阻尼。")
+    elif sluggish:
+        next_gains["kp"] *= med_up
+        if kd > 0 and sign_changes <= 2:
+            next_gains["kd"] *= small_down
+        notes.append("误差收敛偏慢且输出未饱和，优先小幅提高 Kp。")
+    elif steady_bias:
+        if ki > 0:
+            next_gains["ki"] *= small_up
+        else:
+            base = max(abs(kp) * 0.01, 0.001)
+            if ch in ("L", "R"):
+                base = max(abs(kp) * 0.015, 0.5)
+            next_gains["ki"] = base * gain_step
+        notes.append("存在同向稳态误差，建议增加一点 Ki 或检查机械/传感器偏置。")
+    else:
+        notes.append("当前波形没有明显发散，建议只做小步验证。")
+
+    if saturated:
+        next_gains["kp"] *= small_down
+        if ki > 0:
+            next_gains["ki"] *= small_down
+        notes.append("输出接近限幅，参数变化要更保守。")
+
+    if noisy_d and kd > 0:
+        next_gains["kd"] *= small_down
+        notes.append("D 项占比偏高，略降 Kd 可减少抖动。")
+
+    # Keep zero gains zero unless the rule above deliberately introduced Ki.
+    if kp == 0:
+        next_gains["kp"] = 0.0
+    if kd == 0:
+        next_gains["kd"] = 0.0
+
+    for key in next_gains:
+        next_gains[key] = _round_gain(max(0.0, next_gains[key]))
+
+    if next_gains == {"kp": _round_gain(kp), "ki": _round_gain(ki), "kd": _round_gain(kd)}:
+        if mae > 0.01 and kp > 0:
+            next_gains["kp"] = _round_gain(kp * small_up)
+            notes.append("没有触发强特征，按保守策略微调 Kp。")
+
+    confidence = "low"
+    if len(samples) >= 120:
+        confidence = "medium"
+    if len(samples) >= 300 and (oscillating or sluggish or steady_bias):
+        confidence = "high"
+
+    return {
+        "ch": ch,
+        "samples": len(samples),
+        "metrics": {
+            "mae": round(mae, 5),
+            "bias": round(bias, 5),
+            "sigma": round(sigma, 5),
+            "amp": round(amp, 5),
+            "sign_changes": sign_changes,
+            "out_mean_abs": round(out_abs, 5),
+            "out_peak_abs": round(out_peak, 5),
+            "meas_span": round(span_meas, 5),
+        },
+        "flags": {
+            "oscillating": oscillating,
+            "steady_bias": steady_bias,
+            "sluggish": sluggish,
+            "saturated": saturated,
+            "noisy_d": noisy_d,
+        },
+        "current": {"kp": _round_gain(kp), "ki": _round_gain(ki), "kd": _round_gain(kd)},
+        "suggested": next_gains,
+        "notes": notes,
+        "confidence": confidence,
+    }
+
+
+def pid_result_is_good(rec: dict) -> bool:
+    if rec.get("error"):
+        return False
+    metrics = rec.get("metrics", {})
+    flags = rec.get("flags", {})
+    mae = float(metrics.get("mae", 999.0))
+    sigma = float(metrics.get("sigma", 999.0))
+    out_peak = float(metrics.get("out_peak_abs", 999.0))
+    if flags.get("oscillating") or flags.get("sluggish") or flags.get("saturated") or flags.get("noisy_d"):
+        return False
+    if rec.get("ch") in ("L", "R"):
+        return mae < 0.035 and sigma < 0.055 and out_peak < 850
+    if rec.get("ch") == "LINE":
+        return mae < 0.045 and sigma < 0.075 and out_peak < 0.32
+    if rec.get("ch") == "ANG":
+        return mae < 2.0 and sigma < 3.0
+    return mae < 0.05
+
+
+def _extract_json_object(text: str) -> dict | None:
+    text = text.strip()
+    if not text:
+        return None
+    try:
+        obj = json.loads(text)
+        return obj if isinstance(obj, dict) else None
+    except json.JSONDecodeError:
+        pass
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        obj = json.loads(text[start:end + 1])
+        return obj if isinstance(obj, dict) else None
+    except json.JSONDecodeError:
+        return None
+
+
+def _make_ai_prompt(payload: dict) -> str:
+    return """你是一个给 NUEDC 小车调 PID 的控制工程助手。你只能输出 JSON，不能输出 Markdown。
+
+目标：
+- 根据最近遥测和 baseline 建议，给每个通道返回下一轮 PID 参数。
+- 参数要保守，小步调整；如果数据不足或风险大，保持当前参数。
+- 不要修改未请求通道。
+- 输出必须是一个 JSON 对象，格式如下：
+{
+  "channels": {
+    "LINE": {"kp": 82.0, "ki": 0.0, "kd": 19.5, "reason": "short reason"}
+  },
+  "summary": "one sentence",
+  "confidence": "low|medium|high"
+}
+
+硬性安全规则：
+- kp/ki/kd 不能为负数。
+- 单轮变化不超过当前值的 20%；如果当前值为 0，只允许 KI 从 0 小幅增加。
+- 如果 telemetry 里有 saturated/noisy_d/oscillating 标志，优先保守，不要激进增益。
+
+数据包：
+""" + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def _call_ai_cli(provider: str, prompt: str, timeout_s: float = 25.0) -> tuple[dict | None, str, str]:
+    provider = provider.lower()
+    if provider == "claude":
+        exe = shutil.which("claude")
+        if not exe:
+            return None, "", "claude command not found"
+        cmd = [exe, "-p", prompt, "--output-format", "text"]
+    elif provider == "codex":
+        exe = shutil.which("codex")
+        if not exe:
+            return None, "", "codex command not found"
+        cmd = [exe, "exec", "-C", str(HERE.parent.parent), "-s", "read-only",
+               "-a", "never", "--skip-git-repo-check", "-"]
+    else:
+        return None, "", f"unknown provider {provider}"
+
+    try:
+        if provider == "codex":
+            proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=timeout_s)
+        else:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        return None, "", f"{provider} timed out"
+    except Exception as exc:
+        return None, "", str(exc)
+
+    out = proc.stdout.strip()
+    err = proc.stderr.strip()
+    if proc.returncode != 0:
+        return None, out, err or f"{provider} exited {proc.returncode}"
+    return _extract_json_object(out), out, err
+
+
+def _safe_merge_ai_results(local_results: list[dict], ai_obj: dict | None, provider: str) -> list[dict]:
+    if not ai_obj:
+        return local_results
+    channels_obj = ai_obj.get("channels", {})
+    if not isinstance(channels_obj, dict):
+        return local_results
+    merged: list[dict] = []
+    for rec in local_results:
+        if rec.get("error"):
+            merged.append(rec)
+            continue
+        ch = rec["ch"]
+        ai_ch = channels_obj.get(ch)
+        if not isinstance(ai_ch, dict):
+            merged.append(rec)
+            continue
+        current = rec["current"]
+        suggested = rec["suggested"].copy()
+        accepted: dict[str, float] = {}
+        for key in ("kp", "ki", "kd"):
+            try:
+                val = float(ai_ch[key])
+            except (KeyError, TypeError, ValueError):
+                val = suggested[key]
+            cur = float(current[key])
+            if cur == 0.0:
+                if key == "ki":
+                    limit = max(0.001, max(float(current["kp"]) * 0.02, 0.001))
+                    val = _clamp(val, 0.0, limit)
+                else:
+                    val = 0.0
+            else:
+                val = _clamp(val, cur * 0.8, cur * 1.2)
+            accepted[key] = _round_gain(max(0.0, val))
+        out = rec.copy()
+        out["suggested"] = accepted
+        out["provider"] = provider
+        out["ai_reason"] = str(ai_ch.get("reason", ai_obj.get("summary", "")))[:240]
+        out["notes"] = list(out.get("notes", [])) + [f"{provider} 建议: {out['ai_reason']}"]
+        merged.append(out)
+    return merged
+
+
 def make_app(args) -> FastAPI:
     event_queue: queue.Queue[dict] = queue.Queue(maxsize=20000)
     state = State()
     csv_logger = CsvLogger()
     ws_clients: set[WebSocket] = set()
     main_loop: asyncio.AbstractEventLoop | None = None
+    ai_auto = {
+        "running": False,
+        "round": 0,
+        "stable_rounds": 0,
+        "max_rounds": 0,
+        "reason": "",
+        "started_at": 0.0,
+        "last_results": [],
+        "last_sent": [],
+        "channels": [],
+    }
+    ai_auto_stop = threading.Event()
+    ai_auto_lock = threading.Lock()
+    ai_auto_thread: threading.Thread | None = None
 
     def push_event(ev: dict):
         try:
@@ -481,6 +802,195 @@ def make_app(args) -> FastAPI:
 
     bus = SerialBus(on_line, on_status)
 
+    def collect_ai_results(channels: list[str], seconds: float, aggressiveness: float) -> list[dict]:
+        seconds = _clamp(float(seconds), 1.0, 30.0)
+        results: list[dict] = []
+        with state.lock:
+            gains_copy = {ch: g.copy() for ch, g in state.gains.items()}
+            for ch in channels:
+                ser = state.channels.get(ch)
+                if ser is None or not ser["t"]:
+                    results.append({"ch": ch, "error": "no telemetry"})
+                    continue
+                t_vals = list(ser["t"])
+                newest = t_vals[-1]
+                cutoff = newest - seconds
+                idx0 = 0
+                for idx, t in enumerate(t_vals):
+                    if t >= cutoff:
+                        idx0 = idx
+                        break
+                samples = []
+                for idx in range(idx0, len(t_vals)):
+                    samples.append({
+                        "sp": ser["sp"][idx],
+                        "meas": ser["meas"][idx],
+                        "out": ser["out"][idx],
+                        "err": ser["err"][idx],
+                        "p": ser["p"][idx],
+                        "i": ser["i"][idx],
+                        "d": ser["d"][idx],
+                    })
+                if len(samples) < 20:
+                    results.append({"ch": ch, "error": f"not enough samples ({len(samples)})"})
+                    continue
+                results.append(analyze_pid_channel(ch, samples, gains_copy.get(ch, {}), aggressiveness))
+        return results
+
+    def enrich_results_with_provider(results: list[dict], provider: str, seconds: float) -> list[dict]:
+        provider = (provider or "local").lower()
+        if provider == "local":
+            for rec in results:
+                if not rec.get("error"):
+                    rec["provider"] = "local"
+            return results
+        payload = {
+            "provider": provider,
+            "window_seconds": seconds,
+            "baseline_results": results,
+            "safety": {
+                "max_single_round_change_ratio": 0.20,
+                "non_negative_gains": True,
+                "fallback": "keep baseline if output is invalid",
+            },
+        }
+        ai_obj, raw, err = _call_ai_cli(provider, _make_ai_prompt(payload))
+        if ai_obj is None:
+            out = []
+            for rec in results:
+                if rec.get("error"):
+                    out.append(rec)
+                    continue
+                item = rec.copy()
+                item["provider"] = "local"
+                item["notes"] = list(item.get("notes", [])) + [f"{provider} 不可用，已回退本地建议: {err or raw[:160]}"]
+                out.append(item)
+            return out
+        merged = _safe_merge_ai_results(results, ai_obj, provider)
+        for rec in merged:
+            if not rec.get("error"):
+                rec["ai_summary"] = str(ai_obj.get("summary", ""))[:240]
+                rec["ai_confidence"] = str(ai_obj.get("confidence", ""))[:32]
+        return merged
+
+    def apply_ai_results(results: list[dict]) -> list[str]:
+        sent: list[str] = []
+        for rec in results:
+            if rec.get("error"):
+                continue
+            ch = rec["ch"]
+            suggested = rec["suggested"]
+            current = rec["current"]
+            for gain, key in (("KP", "kp"), ("KI", "ki"), ("KD", "kd")):
+                val = suggested[key]
+                if val == current[key]:
+                    continue
+                cmd = f"$SET,{ch},{gain},{val:.6g}\r\n"
+                bus.send(cmd)
+                sent.append(cmd.strip())
+                push_event({"type": "log", "data": {"text": f">> {cmd.strip()}"}})
+                time.sleep(0.03)
+        if sent:
+            try:
+                bus.send("$DUMP\r\n")
+            except Exception:
+                pass
+        return sent
+
+    def ai_auto_snapshot() -> dict:
+        with ai_auto_lock:
+            return {
+                "running": bool(ai_auto["running"]),
+                "round": ai_auto["round"],
+                "stable_rounds": ai_auto["stable_rounds"],
+                "max_rounds": ai_auto["max_rounds"],
+                "reason": ai_auto["reason"],
+                "started_at": ai_auto["started_at"],
+                "last_results": ai_auto["last_results"],
+                "last_sent": ai_auto["last_sent"],
+                "channels": ai_auto["channels"],
+            }
+
+    def ai_auto_publish(status: str):
+        snap = ai_auto_snapshot()
+        snap["status"] = status
+        push_event({"type": "ai_auto", "data": snap})
+
+    def ai_auto_worker(req: AiAutoReq):
+        channels = [ch.upper() for ch in req.channels if ch.upper() in PID_CHANNELS]
+        try:
+            bus.send(f"$RATE,{args.rate}\r\n")
+            time.sleep(0.03)
+            bus.send("$RESUME\r\n")
+        except Exception as exc:
+            with ai_auto_lock:
+                ai_auto["running"] = False
+                ai_auto["reason"] = f"send failed: {exc}"
+            ai_auto_publish("stopped")
+            return
+
+        # Let fresh telemetry fill the first sampling window.
+        wait_s = _clamp(req.seconds, 1.0, 30.0)
+        deadline = time.time() + wait_s
+        while time.time() < deadline:
+            if ai_auto_stop.wait(0.1):
+                with ai_auto_lock:
+                    ai_auto["running"] = False
+                    ai_auto["reason"] = "user stopped"
+                ai_auto_publish("stopped")
+                return
+
+        reason = "max rounds reached"
+        for round_idx in range(1, int(req.max_rounds) + 1):
+            if ai_auto_stop.is_set():
+                reason = "user stopped"
+                break
+            try:
+                results = collect_ai_results(channels, req.seconds, req.aggressiveness)
+                results = enrich_results_with_provider(results, req.provider, req.seconds)
+                all_good = bool(results) and all(pid_result_is_good(r) for r in results)
+                if all_good:
+                    sent: list[str] = []
+                else:
+                    sent = apply_ai_results(results)
+            except Exception as exc:
+                results = [{"ch": ",".join(channels), "error": str(exc)}]
+                sent = []
+                reason = f"error: {exc}"
+                with ai_auto_lock:
+                    ai_auto["last_results"] = results
+                    ai_auto["last_sent"] = sent
+                break
+
+            with ai_auto_lock:
+                ai_auto["round"] = round_idx
+                ai_auto["last_results"] = results
+                ai_auto["last_sent"] = sent
+                if all_good:
+                    ai_auto["stable_rounds"] += 1
+                else:
+                    ai_auto["stable_rounds"] = 0
+                stable_rounds = ai_auto["stable_rounds"]
+            ai_auto_publish("running")
+
+            if stable_rounds >= 3:
+                reason = "stable for 3 rounds"
+                break
+
+            if not sent and not all_good:
+                reason = "no safe adjustment"
+                break
+
+            sleep_s = _clamp(req.interval, 0.5, 10.0)
+            if ai_auto_stop.wait(sleep_s):
+                reason = "user stopped"
+                break
+
+        with ai_auto_lock:
+            ai_auto["running"] = False
+            ai_auto["reason"] = reason
+        ai_auto_publish("stopped")
+
     async def broadcaster():
         nonlocal main_loop
         main_loop = asyncio.get_running_loop()
@@ -526,6 +1036,7 @@ def make_app(args) -> FastAPI:
         snap["port"] = bus.url
         snap["baud"] = bus.baud
         snap["csv_path"] = str(csv_logger.path) if csv_logger.path else None
+        snap["ai_auto"] = ai_auto_snapshot()
         return snap
 
     @app.post("/api/connect")
@@ -552,6 +1063,7 @@ def make_app(args) -> FastAPI:
 
     @app.post("/api/disconnect")
     async def api_disconnect():
+        ai_auto_stop.set()
         bus.disconnect()
         csv_logger.close()
         return {"ok": True}
@@ -607,6 +1119,73 @@ def make_app(args) -> FastAPI:
         push_event({"type": "log", "data": {"text": f">> {cmd.strip()}"}})
         return {"ok": True}
 
+    @app.post("/api/ai/tune")
+    async def api_ai_tune(req: AiTuneReq):
+        channels = [ch.upper() for ch in req.channels if ch.upper() in PID_CHANNELS]
+        if not channels:
+            return JSONResponse({"ok": False, "error": "no valid channels"}, status_code=400)
+
+        now_ms = time.time() * 1000.0
+        results = collect_ai_results(channels, req.seconds, req.aggressiveness)
+        results = await asyncio.to_thread(enrich_results_with_provider, results, req.provider, req.seconds)
+
+        sent: list[str] = []
+        if req.apply:
+            try:
+                sent = await asyncio.to_thread(apply_ai_results, results)
+            except Exception as exc:
+                return JSONResponse({"ok": False, "error": str(exc), "results": results}, status_code=400)
+
+        push_event({"type": "ai_tune", "data": {"results": results, "applied": bool(req.apply), "sent": sent}})
+        return {"ok": True, "results": results, "applied": bool(req.apply), "sent": sent, "server_time_ms": now_ms}
+
+    @app.post("/api/ai/auto/start")
+    async def api_ai_auto_start(req: AiAutoReq):
+        nonlocal ai_auto_thread
+        channels = [ch.upper() for ch in req.channels if ch.upper() in PID_CHANNELS]
+        if not channels:
+            return JSONResponse({"ok": False, "error": "no valid channels"}, status_code=400)
+        if not bus.connected:
+            return JSONResponse({"ok": False, "error": "not connected"}, status_code=400)
+        with ai_auto_lock:
+            if ai_auto["running"]:
+                return JSONResponse({"ok": False, "error": "auto tune already running"}, status_code=409)
+            ai_auto_stop.clear()
+            ai_auto.update({
+                "running": True,
+                "round": 0,
+                "stable_rounds": 0,
+                "max_rounds": int(_clamp(req.max_rounds, 1, 50)),
+                "reason": "",
+                "started_at": time.time(),
+                "last_results": [],
+                "last_sent": [],
+                "channels": channels,
+            })
+        req.channels = channels
+        req.seconds = _clamp(req.seconds, 1.0, 30.0)
+        req.aggressiveness = _clamp(req.aggressiveness, 0.1, 1.0)
+        req.interval = _clamp(req.interval, 0.5, 10.0)
+        req.max_rounds = int(_clamp(req.max_rounds, 1, 50))
+        req.provider = (req.provider or "local").lower()
+        ai_auto_thread = threading.Thread(target=ai_auto_worker, args=(req,), daemon=True)
+        ai_auto_thread.start()
+        ai_auto_publish("started")
+        return {"ok": True, "auto": ai_auto_snapshot()}
+
+    @app.post("/api/ai/auto/stop")
+    async def api_ai_auto_stop():
+        ai_auto_stop.set()
+        with ai_auto_lock:
+            if not ai_auto["running"]:
+                ai_auto["reason"] = ai_auto["reason"] or "already stopped"
+        ai_auto_publish("stopping")
+        return {"ok": True, "auto": ai_auto_snapshot()}
+
+    @app.get("/api/ai/auto/status")
+    async def api_ai_auto_status():
+        return {"ok": True, "auto": ai_auto_snapshot()}
+
     @app.post("/api/log/{action}")
     async def api_log(action: str):
         mapping = {
@@ -654,6 +1233,8 @@ def make_app(args) -> FastAPI:
             snap["connected"] = bus.connected
             snap["port"] = bus.url
             snap["baud"] = bus.baud
+            snap["csv_path"] = str(csv_logger.path) if csv_logger.path else None
+            snap["ai_auto"] = ai_auto_snapshot()
             await ws.send_text(json.dumps({"type": "snapshot", "data": snap}))
             while True:
                 # keep open; ignore client messages
