@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Natural-ish launcher:
+#   ./wake up diansai web 0   # wired USB
+#   ./wake up diansai web 1   # ESP32 bridge, local browser
+#   ./wake up diansai web 2   # phone mode
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ "${1:-}" == "up" && "${2:-}" == "diansai" && "${3:-}" == "web" ]]; then
+  shift 3
+  exec "$ROOT_DIR/scripts/start.sh" "${1:-2}" "${@:2}"
+fi
+
+cat <<'USAGE'
+用法:
+  ./wake up diansai web 0   # 有线 USB: /dev/ttyACM0
+  ./wake up diansai web 1   # ESP32 无线: socket://192.168.4.1:3333
+  ./wake up diansai web 2   # 手机模式: 手机访问电脑的 8765 端口
+
+也可以直接用:
+  ./scripts/start.sh 0
+  ./scripts/start.sh 1
+  ./scripts/start.sh 2
+USAGE
+exit 2

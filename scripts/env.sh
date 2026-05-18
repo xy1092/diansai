@@ -38,6 +38,7 @@ fi
 if [[ -z "${JLINK_EXE:-}" ]]; then
   for jlink_dir in \
     "$HOME/Downloads/JLink_Linux_V938_x86_64" \
+    "$HOME/下载/JLink_Linux_V938_x86_64" \
     "$HOME/JLink_Linux_V938_x86_64" \
     "/opt/SEGGER/JLink"
   do
