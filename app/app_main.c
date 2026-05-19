@@ -35,17 +35,19 @@
  * With 20 pulse/cm, 0.50 pulse/ms is about 25 cm/s.
  */
 #define SPEED_MIN_PULSE             0.18f
-#define SPEED_MAX_PULSE             0.65f
-#define ARC_CRUISE_PULSE            0.42f
-#define SEEK_LINE_PULSE             0.24f
-#define LINE_SEEK_DIFF              0.18f
+#define SPEED_MAX_PULSE             0.45f
+#define ARC_CRUISE_PULSE            0.26f
+#define SEEK_LINE_PULSE             0.20f
+#define LINE_SEEK_DIFF              0.16f
+#define FORWARD_MIN_PULSE           0.03f
+#define POSE_TURN_RATIO             0.55f
 
 #define POSE_BLEND_CM               20.0f
 #define POSE_POS_TOL_CM             4.0f
 #define POSE_HEADING_TOL_RAD        0.18f
-#define POSE_KP_DIST                0.018f
-#define POSE_KP_HEAD                0.42f
-#define POSE_KP_FINAL               0.22f
+#define POSE_KP_DIST                0.010f
+#define POSE_KP_HEAD                0.18f
+#define POSE_KP_FINAL               0.12f
 
 #define ARC_RADIUS_CM               40.0f
 #define ARC_LEN_CM                  125.7f
@@ -55,12 +57,12 @@
 #define TRACK_HEIGHT_CM             (2.0f * ARC_RADIUS_CM)
 #define ARC_IMU_HOLD_KP             0.20f
 
-#define SPEED_PID_KP                580.0f
-#define SPEED_PID_KI                8.0f
-#define SPEED_PID_KD                35.0f
-#define LINE_PID_KP                 82.0f
+#define SPEED_PID_KP                180.0f
+#define SPEED_PID_KI                1.0f
+#define SPEED_PID_KD                0.0f
+#define LINE_PID_KP                 1.5f
 #define LINE_PID_KI                 0.0f
-#define LINE_PID_KD                 18.0f
+#define LINE_PID_KD                 0.0f
 #define ANG_PID_KP                  0.0f
 #define ANG_PID_KI                  0.0f
 #define ANG_PID_KD                  0.0f
@@ -107,6 +109,9 @@ static float         cfg_pose_kp_final = POSE_KP_FINAL;
 static float         cfg_arc_done_min_cm = ARC_DONE_MIN_CM;
 static float         cfg_arc_done_tol_cm = ARC_DONE_TOL_CM;
 static float         cfg_arc_imu_hold_kp = ARC_IMU_HOLD_KP;
+static float         cfg_dead_zone_L     = 0.0f;   /* PWM feedforward (0-1000) */
+static float         cfg_dead_zone_R     = 0.0f;
+static float         cfg_pose_snap       = 1.0f;   /* >=0.5 → snap pose at every segment start */
 
 static PID_t         pid_spd_L, pid_spd_R;
 static PID_t         pid_line;
@@ -137,6 +142,11 @@ static uint8_t       s_loop_goal = 1;
 static uint8_t       s_loop_index = 0;
 static uint8_t       s_seg_index = 0;
 static uint8_t       s_line_lost_cnt = 0;
+
+static uint8_t       s_debug_pwm_active = 0u;
+static int16_t       s_debug_pwm_L      = 0;
+static int16_t       s_debug_pwm_R      = 0;
+static uint32_t      s_debug_pwm_deadline_ms = 0u;
 
 extern volatile uint32_t g_tick_ms;
 
@@ -269,6 +279,25 @@ static void begin_segment(void)
     s_line_lost_cnt = 0u;
     s_arc_hold_yaw_deg = s_yaw_deg;
     PID_Reset(&pid_line);
+
+    /* Snap pose to the known waypoint at segment boundary so theta does not
+     * drift across H3/H4 laps. Segment 0 → mission start pose; otherwise →
+     * the previous segment's target pose.
+     */
+    if (cfg_pose_snap >= 0.5f) {
+        uint8_t count;
+        uint8_t loops_unused;
+        Pose2D_t start_pose;
+        const RouteSegment_t *route = get_route(&count, &loops_unused, &start_pose);
+        if (s_seg_index == 0u) {
+            s_pose = start_pose;
+        } else if (s_seg_index <= count) {
+            const RouteSegment_t *prev = &route[s_seg_index - 1u];
+            s_pose.x = prev->x;
+            s_pose.y = prev->y;
+            s_pose.theta = prev->theta;
+        }
+    }
 }
 
 static void finish_mission(void)
@@ -337,11 +366,14 @@ static void control_goto_pose(const RouteSegment_t *seg)
     float heading_err = wrap_pi(ref_heading - s_pose.theta);
     float turn = cfg_pose_kp_head * heading_err + cfg_pose_kp_final * blend * final_err;
     float speed = pose_speed_cmd(dist, heading_err, final_err);
+    float max_turn = POSE_TURN_RATIO * speed;
+
+    turn = clampf(turn, -max_turn, max_turn);
 
     update_ang_telemetry(ref_heading, s_pose.theta, turn);
 
-    s_target_speed_L = clampf(speed - turn, -SPEED_OUT_LIMIT, SPEED_OUT_LIMIT);
-    s_target_speed_R = clampf(speed + turn, -SPEED_OUT_LIMIT, SPEED_OUT_LIMIT);
+    s_target_speed_L = clampf(speed - turn, FORWARD_MIN_PULSE, SPEED_OUT_LIMIT);
+    s_target_speed_R = clampf(speed + turn, FORWARD_MIN_PULSE, SPEED_OUT_LIMIT);
 
     if (dist < POSE_POS_TOL_CM && fabsf(final_err) < POSE_HEADING_TOL_RAD) {
         next_segment();
@@ -370,8 +402,8 @@ static void control_arc_track(const RouteSegment_t *seg)
         s_line_lost_cnt = 0u;
     }
 
-    s_target_speed_L = clampf(base - diff, -SPEED_OUT_LIMIT, SPEED_OUT_LIMIT);
-    s_target_speed_R = clampf(base + diff, -SPEED_OUT_LIMIT, SPEED_OUT_LIMIT);
+    s_target_speed_L = clampf(base - diff, FORWARD_MIN_PULSE, SPEED_OUT_LIMIT);
+    s_target_speed_R = clampf(base + diff, FORWARD_MIN_PULSE, SPEED_OUT_LIMIT);
 
     if (s_seg_dist_cm >= (seg->length_cm - cfg_arc_done_tol_cm)) {
         if (!App_Tracking_IsOnLine() || s_seg_dist_cm >= (seg->length_cm + cfg_arc_done_tol_cm)) {
@@ -460,8 +492,28 @@ static void control_speed_inner(void)
     uR = (int16_t)PID_Update(&pid_spd_R, s_target_speed_R, (float)dR);
 
     if (s_state == STATE_RUN) {
+        /* Dead-zone feedforward: only when wheel is meant to move forward. */
+        if (s_target_speed_L > FORWARD_MIN_PULSE && uL > 0) {
+            int32_t ff = (int32_t)uL + (int32_t)cfg_dead_zone_L;
+            if (ff > (int32_t)SPEED_OUT_LIMIT) ff = (int32_t)SPEED_OUT_LIMIT;
+            uL = (int16_t)ff;
+        }
+        if (s_target_speed_R > FORWARD_MIN_PULSE && uR > 0) {
+            int32_t ff = (int32_t)uR + (int32_t)cfg_dead_zone_R;
+            if (ff > (int32_t)SPEED_OUT_LIMIT) ff = (int32_t)SPEED_OUT_LIMIT;
+            uR = (int16_t)ff;
+        }
         BSP_Motor_SetDuty(0, uL);
         BSP_Motor_SetDuty(1, uR);
+    } else if (s_debug_pwm_active) {
+        if (g_tick_ms >= s_debug_pwm_deadline_ms) {
+            s_debug_pwm_active = 0u;
+            BSP_Motor_SetDuty(0, 0);
+            BSP_Motor_SetDuty(1, 0);
+        } else {
+            BSP_Motor_SetDuty(0, s_debug_pwm_L);
+            BSP_Motor_SetDuty(1, s_debug_pwm_R);
+        }
     } else {
         BSP_Motor_SetDuty(0, 0);
         BSP_Motor_SetDuty(1, 0);
@@ -570,6 +622,9 @@ void App_Init(void)
     Telem_RegisterParam("arc_min", &cfg_arc_done_min_cm, 0.0f, 160.0f);
     Telem_RegisterParam("arc_tol", &cfg_arc_done_tol_cm, 0.0f, 40.0f);
     Telem_RegisterParam("imu_hold", &cfg_arc_imu_hold_kp, 0.0f, 1.0f);
+    Telem_RegisterParam("dead_L",   &cfg_dead_zone_L,    0.0f, 400.0f);
+    Telem_RegisterParam("dead_R",   &cfg_dead_zone_R,    0.0f, 400.0f);
+    Telem_RegisterParam("pose_snap",&cfg_pose_snap,      0.0f, 1.0f);
     {
         const TrackInfo_t *track = App_Tracking_GetInfo();
         Telem_BindLineSensors(track->raw, BSP_ADC_CCD_COUNT,
@@ -642,4 +697,31 @@ AppState_t App_GetState(void)
 AppMission_t App_GetMission(void)
 {
     return s_mission;
+}
+
+void App_SetDebugDuty(int16_t left_pwm, int16_t right_pwm, uint32_t hold_ms)
+{
+    /* Only allow PWM override when no mission is running. */
+    if (s_state == STATE_RUN) return;
+
+    if (left_pwm  < 0)    left_pwm  = 0;
+    if (left_pwm  > 1000) left_pwm  = 1000;
+    if (right_pwm < 0)    right_pwm = 0;
+    if (right_pwm > 1000) right_pwm = 1000;
+
+    if (hold_ms == 0u)      hold_ms = 800u;
+    if (hold_ms > 60000u)   hold_ms = 60000u;
+
+    s_debug_pwm_L = left_pwm;
+    s_debug_pwm_R = right_pwm;
+    s_debug_pwm_deadline_ms = g_tick_ms + hold_ms;
+    s_debug_pwm_active = 1u;
+}
+
+void App_ClearDebugDuty(void)
+{
+    s_debug_pwm_active = 0u;
+    s_debug_pwm_L = 0;
+    s_debug_pwm_R = 0;
+    s_debug_pwm_deadline_ms = 0u;
 }

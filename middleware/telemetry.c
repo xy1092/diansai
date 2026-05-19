@@ -1,4 +1,5 @@
 #include "telemetry.h"
+#include "../app/app_main.h"
 #include "../bsp/bsp_uart.h"
 #include "protocol.h"
 #include <stdio.h>
@@ -478,6 +479,29 @@ static void handle_line(char *line)
         int on = atoi(line + 5);
         s_blackbox_enabled = on ? 1u : 0u;
         BSP_Uart_Printf("$OK,log,%u\r\n", (unsigned)s_blackbox_enabled);
+    } else if (!strcmp(line, "$DUTYSTOP")) {
+        App_ClearDebugDuty();
+        BSP_Uart_Printf("$OK,dutystop\r\n");
+    } else if (!strncmp(line, "$DUTY,", 6)) {
+        /* $DUTY,<left>,<right>[,<hold_ms>]  — left/right 0..1000, hold 60..60000 */
+        char *p = line + 6;
+        char *p2 = strchr(p, ',');
+        if (!p2) {
+            BSP_Uart_Printf("$ERR,duty,parse\r\n");
+        } else {
+            *p2++ = 0;
+            char *p3 = strchr(p2, ',');
+            uint32_t hold = 0u;
+            if (p3) { *p3++ = 0; hold = (uint32_t)atoi(p3); }
+            int left  = atoi(p);
+            int right = atoi(p2);
+            if (App_GetState() == STATE_RUN) {
+                BSP_Uart_Printf("$ERR,duty,running\r\n");
+            } else {
+                App_SetDebugDuty((int16_t)left, (int16_t)right, hold);
+                BSP_Uart_Printf("$OK,duty,%d,%d,%u\r\n", left, right, (unsigned)hold);
+            }
+        }
     } else {
         BSP_Uart_Printf("$ERR,unknown\r\n");
     }

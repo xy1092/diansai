@@ -19,6 +19,7 @@
       <button class="nav-item" data-view="ai"><i>✦</i><span>AI 调试</span></button>
       <button class="nav-item" data-view="params"><i>⚙</i><span>运行参数</span></button>
       <button class="nav-item" data-view="logs"><i>▤</i><span>黑匣子</span></button>
+      <button class="nav-item" data-view="debug"><i>⚒</i><span>调试</span></button>
       <button class="nav-item" data-view="console"><i>›_</i><span>控制台</span></button>
     </nav>
     <div class="sidebar-foot">
@@ -267,6 +268,63 @@
       </div>
     </section>
 
+    <section class="view view-debug" data-view="debug">
+      <div class="card">
+        <header class="card-head">
+          <div class="card-title">死区扫描 · 直接 PWM 输出</div>
+          <div class="card-actions"><span class="muted">仅 READY / STOP 生效，800ms 看门狗会自动停</span></div>
+        </header>
+        <div class="card-body">
+          <div class="debug-grid">
+            <label>左轮 PWM (0-300)
+              <input id="duty-l" type="range" min="0" max="300" step="1" value="0">
+              <input id="duty-l-num" type="number" min="0" max="1000" step="1" value="0">
+            </label>
+            <label>右轮 PWM (0-300)
+              <input id="duty-r" type="range" min="0" max="300" step="1" value="0">
+              <input id="duty-r-num" type="number" min="0" max="1000" step="1" value="0">
+            </label>
+            <label>看门狗 hold_ms
+              <input id="duty-hold" type="number" min="200" max="5000" step="100" value="800">
+            </label>
+            <div class="debug-actions">
+              <button id="btn-duty-apply" class="btn primary">应用</button>
+              <button id="btn-duty-stop" class="btn">停止</button>
+              <button id="btn-duty-refresh" class="btn ghost">续约</button>
+            </div>
+          </div>
+          <p class="muted">操作流程：从 0 逐步加滑块（每次 +10），观察左/右编码器 meas 何时开始变化，那一刻 PWM 就是该轮的死区。把数值填到下方"死区前馈"。</p>
+          <div class="debug-readout">
+            <span>L meas: <strong id="duty-l-meas">--</strong></span>
+            <span>R meas: <strong id="duty-r-meas">--</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <header class="card-head">
+          <div class="card-title">死区前馈与段间 theta snap</div>
+        </header>
+        <div class="card-body">
+          <div class="debug-grid">
+            <label>左轮死区前馈 dead_L
+              <input id="cfg-dead-L" type="number" min="0" max="400" step="1" value="0">
+            </label>
+            <label>右轮死区前馈 dead_R
+              <input id="cfg-dead-R" type="number" min="0" max="400" step="1" value="0">
+            </label>
+            <label>段间 theta snap (0 或 1)
+              <input id="cfg-pose-snap" type="number" min="0" max="1" step="1" value="1">
+            </label>
+            <div class="debug-actions">
+              <button id="btn-debug-cfg-apply" class="btn primary">写入</button>
+            </div>
+          </div>
+          <p class="muted">死区前馈只在 mission RUN 中应用，对 PID 输出 &gt; 0 的一侧加上对应 PWM。pose_snap=1 时每段开始把 pose 强制对齐到 ABCD 顶点。</p>
+        </div>
+      </div>
+    </section>
+
     <section class="view view-console" data-view="console">
       <div class="card console-card">
         <header class="card-head"><div class="card-title">原始消息 / 自定义命令</div>
@@ -286,6 +344,6 @@
   </main>
 </div>
 
-<script src="app.js?v=zero-gains-20260518"></script>
+<script src="app.js?v=debug-panel-20260519"></script>
 </body>
 </html>

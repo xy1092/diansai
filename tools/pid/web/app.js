@@ -249,8 +249,8 @@ function onPid(rec) {
     setStat(card, "err", fmt(rec.err, 3));
   }
   // top stats
-  if (ch === "L") setText("#stat-l-meas", fmt(rec.meas, 3));
-  if (ch === "R") setText("#stat-r-meas", fmt(rec.meas, 3));
+  if (ch === "L") { setText("#stat-l-meas", fmt(rec.meas, 3)); setText("#duty-l-meas", fmt(rec.meas, 3)); }
+  if (ch === "R") { setText("#stat-r-meas", fmt(rec.meas, 3)); setText("#duty-r-meas", fmt(rec.meas, 3)); }
   if (ch === "LINE") setText("#stat-line-bias", fmt(rec.meas, 3));
   state.frames++;
   state.lastFrameTs = performance.now();
@@ -643,6 +643,56 @@ function wireUi() {
     if (!v) return;
     sendCmd(v);
     $("#cmd-input").value = "";
+  });
+
+  wireDebugPanel();
+}
+
+// -------- Debug panel (dead-zone scan + feedforward + pose snap) --------
+function wireDebugPanel() {
+  const lSlider = $("#duty-l");
+  const lNum    = $("#duty-l-num");
+  const rSlider = $("#duty-r");
+  const rNum    = $("#duty-r-num");
+  if (!lSlider || !rSlider) return;
+
+  const sync = (a, b) => {
+    a.addEventListener("input", () => { b.value = a.value; });
+    b.addEventListener("input", () => { a.value = b.value; });
+  };
+  sync(lSlider, lNum);
+  sync(rSlider, rNum);
+
+  async function applyDuty() {
+    const left  = parseInt($("#duty-l-num").value || "0", 10);
+    const right = parseInt($("#duty-r-num").value || "0", 10);
+    const hold  = parseInt($("#duty-hold").value || "800", 10);
+    const r = await api("/api/debug/duty", { left, right, hold_ms: hold });
+    if (r.ok) log(`>> ${r.sent}`, "send");
+    else      log("duty 失败: " + (r.error || ""), "err");
+  }
+  async function stopDuty() {
+    const r = await api("/api/debug/duty/stop", {});
+    if (r.ok) log(">> $DUTYSTOP", "send");
+    else      log("duty stop 失败: " + (r.error || ""), "err");
+    lSlider.value = "0"; lNum.value = "0";
+    rSlider.value = "0"; rNum.value = "0";
+  }
+  $("#btn-duty-apply").addEventListener("click", applyDuty);
+  $("#btn-duty-stop").addEventListener("click", stopDuty);
+  $("#btn-duty-refresh").addEventListener("click", applyDuty);
+
+  $("#btn-debug-cfg-apply").addEventListener("click", async () => {
+    const entries = [
+      ["dead_L",     parseFloat($("#cfg-dead-L").value || "0")],
+      ["dead_R",     parseFloat($("#cfg-dead-R").value || "0")],
+      ["pose_snap",  parseFloat($("#cfg-pose-snap").value || "1")],
+    ];
+    for (const [name, value] of entries) {
+      const r = await api("/api/cfg/set", { name, value });
+      if (!r.ok) { log(`cfg ${name} 失败: ${r.error}`, "err"); return; }
+    }
+    log("已写入 dead_L / dead_R / pose_snap", "sys");
   });
 }
 

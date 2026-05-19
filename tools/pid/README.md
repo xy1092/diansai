@@ -65,6 +65,7 @@ Web 面板功能：
 - 实时显示 `L/R/LINE/ANG` 四路 PID 曲线
 - 写入/读回 PID 参数
 - 调运行参数和黑匣子
+- 死区扫描、死区前馈、段间 `theta snap`
 - AI 调试页支持 `本地规则 / Claude Code / Codex`
 - 自动闭环调参：点击开始后自动采样、分析、写入，直到稳定或手动停止
 
@@ -161,7 +162,17 @@ socat -d -d pty,raw,echo=0,link=/tmp/ttyV0 pty,raw,echo=0,link=/tmp/ttyV1 &
 - Dashboard 里的 `Pause / Resume` 控制的是 **遥测流**，方便你暂停界面刷新或继续观察。
 - 真正的断点暂停、继续执行，还是通过 VS Code 调试器控制。
 
-## 六、典型调参 checklist
+## 六、赛题对应的默认策略
+
+当前车端默认值是按 H 题首跑保守值设置的：
+
+- 循迹 bias 已归一化到 `[-1, 1]`
+- 直线/弧线/姿态控制都限制为前进输出
+- `H1/H2/H3/H4` 路由完整
+- 段间 `theta snap` 默认开启
+- 死区前馈默认关闭，先扫再填
+
+## 七、典型调参 checklist
 
 - [ ] **速度环 Kp**：给阶跃（固定 target_speed），观察 rise time；目标 < 200 ms
 - [ ] **速度环 Ki**：等稳态误差出来后加，注意积分限幅别打满

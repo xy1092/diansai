@@ -4,6 +4,11 @@
 
 #define TRACK_CONTRAST_TH   120u
 #define TRACK_STRENGTH_TH   260u
+/* Weights span -6..6; divide by this to normalize bias to [-1, 1] so the
+ * line PID gain has a clean, interpretable scale.
+ */
+#define TRACK_WEIGHT_SPAN   6.0f
+#define TRACK_LOST_DIFF     0.18f
 
 static PID_t     *s_pid = 0;
 static TrackInfo_t s_info;
@@ -39,7 +44,8 @@ static void update_track_info(void)
                       s_info.strength >= TRACK_STRENGTH_TH) ? 1u : 0u;
 
     if (s_info.on_line && strength != 0u) {
-        s_info.bias = LPF1_Update(&s_bias_lpf, (float)weighted / (float)strength);
+        float raw_bias = (float)weighted / ((float)strength * TRACK_WEIGHT_SPAN);
+        s_info.bias = LPF1_Update(&s_bias_lpf, raw_bias);
         s_info.last_bias = s_info.bias;
     } else {
         s_info.bias = s_info.last_bias;
@@ -61,9 +67,12 @@ float App_Tracking_LineControl(void)
 
     if (!s_pid) return 0.0f;
     if (!s_info.on_line) {
+        /* Safe forward-only seek diff (pulse/ms units). Caller in arc mode
+         * overrides this, but other future callers must not pivot/reverse.
+         */
         float hold = s_info.last_bias;
-        if (hold > 0.0f) return 220.0f;
-        if (hold < 0.0f) return -220.0f;
+        if (hold > 0.0f) return  TRACK_LOST_DIFF;
+        if (hold < 0.0f) return -TRACK_LOST_DIFF;
         return 0.0f;
     }
 

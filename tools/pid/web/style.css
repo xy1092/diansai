@@ -258,6 +258,29 @@ body {
   border-radius: 6px; padding: 5px 8px; font-size: 12px; outline: none;
 }
 
+/* Debug panel */
+.debug-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+.debug-grid label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 12px; color: var(--muted);
+}
+.debug-grid input[type="range"] { width: 100%; }
+.debug-grid input[type="number"] {
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 8px; font-size: 13px; outline: none;
+}
+.debug-actions { display: flex; gap: 8px; align-items: flex-end; }
+.debug-readout {
+  display: flex; gap: 24px; margin-top: 10px;
+  font-size: 13px; color: var(--text);
+}
+.debug-readout strong { color: var(--accent); }
+
 /* AI tuning */
 .ai-body { display: flex; flex-direction: column; gap: 14px; }
 .ai-controls {

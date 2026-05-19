@@ -408,6 +408,12 @@ class RawlineReq(BaseModel):
     on: bool
 
 
+class DebugDutyReq(BaseModel):
+    left: int = 0
+    right: int = 0
+    hold_ms: int = 800
+
+
 class AiTuneReq(BaseModel):
     channels: list[str] = Field(default_factory=lambda: ["LINE"])
     seconds: float = 8.0
@@ -1116,6 +1122,29 @@ def make_app(args) -> FastAPI:
     async def api_rawline(req: RawlineReq):
         cmd = f"$RAWLINE,{1 if req.on else 0}\r\n"
         bus.send(cmd)
+        push_event({"type": "log", "data": {"text": f">> {cmd.strip()}"}})
+        return {"ok": True}
+
+    @app.post("/api/debug/duty")
+    async def api_debug_duty(req: DebugDutyReq):
+        left = max(0, min(1000, int(req.left)))
+        right = max(0, min(1000, int(req.right)))
+        hold = max(60, min(60000, int(req.hold_ms)))
+        cmd = f"$DUTY,{left},{right},{hold}\r\n"
+        try:
+            bus.send(cmd)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        push_event({"type": "log", "data": {"text": f">> {cmd.strip()}"}})
+        return {"ok": True, "sent": cmd.strip()}
+
+    @app.post("/api/debug/duty/stop")
+    async def api_debug_duty_stop():
+        cmd = "$DUTYSTOP\r\n"
+        try:
+            bus.send(cmd)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
         push_event({"type": "log", "data": {"text": f">> {cmd.strip()}"}})
         return {"ok": True}
 
